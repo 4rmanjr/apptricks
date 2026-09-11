@@ -1,62 +1,90 @@
 # apptricks
 
-Kelola aplikasi Windows di Linux dengan pola **1 app = 1 Wine prefix terisolasi**.
-Terinspirasi `winetricks`, tapi fokus ke isolasi prefix per aplikasi + GUI
-klik-kanan ala Windows.
+**One Windows app = one isolated Wine prefix.** Inspired by `winetricks`,
+focused on per-application prefix isolation with a Windows-like
+right-click GUI on Linux.
 
 ```text
-<BASE>/.AppKu/        ← WINEPREFIX untuk AppKu
-<BASE>/.AppLain/      ← WINEPREFIX untuk AppLain (tidak saling mengganggu)
+<BASE>/.MyApp/      ← WINEPREFIX for MyApp
+<BASE>/.OtherApp/   ← WINEPREFIX for OtherApp (never interfere)
 ```
 
-## Fitur
+No shared `~/.wine` breakage: each app gets its own `drive_c/`, registry,
+and settings. Delete a prefix = fully uninstall that app.
 
-- **CLI** `apptricks`: `list init install run cfg explorer uninstaller kill path`
-- **GUI Zenity** `apptricks-gui`: menu lengkap + saran nama prefix otomatis
-- **Klik kanan di Dolphin**: `Install to Prefix...` / `Run with Prefix...`
-- **Impor portable**: exe di luar prefix ditawari disalin ke `drive_c/Portable/` agar mandiri
-- **Launcher otomatis**: setelah install/impor, pilih lokasi: menu aplikasi / Desktop / keduanya
-- **Lokasi prefix bisa diatur** (`APPTRICKS_BASE` / file config), default XDG
-- **`~/.wine` tidak pernah disentuh**
+## Features
 
-## Kebutuhan
+- **CLI** — `apptricks list init install run cfg explorer uninstaller kill path`
+- **Zenity GUI** — full menu, automatic prefix-name suggestions, zero extra deps
+- **Dolphin right-click** — `Install to Prefix...` / `Run with Prefix...`
+- **Portable import** — an exe outside any prefix is offered to be copied into
+  `drive_c/Portable/` so it becomes self-contained
+- **Launchers on demand** — after install/import, pick the location:
+  app menu, Desktop, or both (never guessed paths, always your real exe)
+- **Portable base dir** — override via `$APPTRICKS_BASE` or
+  `~/.config/apptricks/config`, sensible XDG default
+- **`~/.wine` is never touched**, no `sudo` for wine operations
 
-- `bash`, `wine` (wajib untuk init/install; CLI/GUI bisa dibuka tanpanya)
-- `zenity` (wajib untuk GUI; CLI tetap jalan tanpanya)
-- Opsional: KDE (`kbuildsycoca6/5`) untuk refresh menu otomatis
+## Requirements
 
-`setup.sh` mendeteksi dan menawarkan install yang kurang
-(`pacman`/`apt`/`dnf`/`zypper`).
+| Package | Needed for |
+|---|---|
+| `bash`, `wine` | prefix init/install (`list`/`help` work without wine) |
+| `zenity` | GUI (CLI works without it) |
+| KDE (`kbuildsycoca6/5`) | automatic menu refresh (optional) |
 
-## Install
+`setup.sh` detects your distro (`pacman`/`apt`/`dnf`/`zypper`) and offers to
+install what's missing.
+
+## Quick start
 
 ```bash
-git clone <url> apptricks && cd apptricks
-./setup.sh            # interaktif, 8 langkah dengan progress
+git clone git@github.com:4rmanjr/apptricks.git
+cd apptricks
+./setup.sh            # guided, 8 steps with progress
 ```
 
-Opsi: `--yes` (non-interaktif) · `--base DIR` (lokasi prefix) ·
-`--no-desktop` (tanpa integrasi Dolphin/menu) · `--skip-deps` ·
-`--help`
+Options: `--yes` (non-interactive) · `--base DIR` (prefix location) ·
+`--no-desktop` (skip Dolphin/menu integration) · `--skip-deps` · `--help`
 
-Uninstall: `./uninstall.sh` (`--purge` untuk hapus config & prefix juga).
-
-## Pakai
+Then either use the terminal:
 
 ```bash
-apptricks init .AppKu
-apptricks install .AppKu ~/Downloads/setup-appku.exe
-apptricks run .AppKu "<BASE>/.AppKu/drive_c/Program Files/AppKu/app.exe"
+apptricks init .MyApp
+apptricks install .MyApp ~/Downloads/setup-myapp.exe
+apptricks run .MyApp "<BASE>/.MyApp/drive_c/Program Files/MyApp/app.exe"
 ```
 
-atau klik kanan `setup.exe` di Dolphin → **Install ke Prefix...**
+or right-click a `setup.exe` in Dolphin → **Install to Prefix...** —
+pick an existing prefix or create a new one (name pre-suggested, editable),
+the installer runs inside it, and you're offered a launcher afterwards.
 
-## Konfigurasi (`~/.config/apptricks/`)
+## How the pieces fit
 
-- `config` — satu baris: `APPTRICKS_BASE="/path/ke/prefixes"`
-- `aliases` — mapping saran nama GUI, format `pola=nama` (lihat `config/aliases.example`)
+- `Install to Prefix...` = **put** an app into a prefix (runs the installer
+  there, auto-`init` when new, offers a launcher when done).
+- `Run with Prefix...` = **run** any exe under a prefix's environment
+  (no install). Exes outside the prefix trigger the portable-import offer.
+- Launchers are always built from an exe that is proven to exist —
+  never from guessed paths.
 
-## Isi repo
+## Configuration (`~/.config/apptricks/`)
+
+- `config` — one line: `APPTRICKS_BASE="/path/to/prefixes"`
+- `aliases` — custom GUI name suggestions, `pattern=name` per line
+  (see `config/aliases.example`)
+
+Base resolution order: `$APPTRICKS_BASE` → config file → XDG default
+(`~/.local/share/apptricks/prefixes`).
+
+## Uninstall
+
+```bash
+./uninstall.sh          # removes binaries + desktop integration (data kept)
+./uninstall.sh --purge  # also removes config, aliases, and (if confirmed) prefixes
+```
+
+## Repo layout
 
 ```text
 setup.sh uninstall.sh README.md LICENSE
@@ -64,7 +92,9 @@ bin/apptricks bin/apptricks-gui
 share/kio/servicemenus/apptricks.desktop
 share/applications/apptricks-gui.desktop
 config/aliases.example
-docs/AGENTS.md        # panduan untuk AI/automation
+docs/AGENTS.md        # guide for AI/automation consumers
 ```
 
-Lisensi: MIT.
+## License
+
+MIT — see [LICENSE](LICENSE).
