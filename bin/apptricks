@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# apptricks - Wine Prefix manager, pola: <BASE>/.[NamaApp] = 1 prefix terisolasi
+# (terinspirasi winetricks). Aturan: jangan pakai ~/.wine, selalu WINEPREFIX
+# eksplisit per perintah, jangan export global.
+set -euo pipefail
+
+# Lokasi prefix: $APPTRICKS_BASE > ~/.config/apptricks/config > default XDG.
+if [[ -z "${APPTRICKS_BASE:-}" && -f "$HOME/.config/apptricks/config" ]]; then
+  # shellcheck disable=SC1090
+  . "$HOME/.config/apptricks/config"
+fi
+BASE="${APPTRICKS_BASE:-$HOME/.local/share/apptricks/prefixes}"
+
+norm() {
+  local n="${1:?nama prefix diperlukan, cth: .MT5XM atau MT5XM}"
+  [[ "$n" != .* ]] && n=".$n"
+  printf '%s/%s' "$BASE" "$n"
+}
+
+usage() {
+  cat <<'EOF'
+apptricks - kelola Wine prefix per-app (1 app = 1 prefix di <BASE>/.[NamaApp])
+
+Usage:
+  apptricks list
+  apptricks init <Name>                  # buat + wineboot --init  (Name boleh .AppKu atau AppKu)
+  apptricks install <Name> <setup.exe> [args...]   # jalankan installer ke prefix itu
+  apptricks run <Name> <exe> [args...]   # jalankan exe (path unix drive_c/... atau C:\...)
+  apptricks cfg <Name>                   # winecfg untuk prefix itu
+  apptricks explorer <Name>              # wine explorer
+  apptricks uninstaller <Name>           # wine uninstaller
+  apptricks kill <Name>                  # wineserver -k prefix itu
+  apptricks path <Name>                  # cetak path prefix
+  apptricks help
+
+Contoh:
+  apptricks init .AppKu
+  apptricks install .AppKu "$HOME/Downloads/setup-appku.exe"
+  apptricks run .AppKu "$BASE/.AppKu/drive_c/Program Files/AppKu/app.exe"
+
+Catatan:
+  - Jangan set WINEPREFIX global di .bashrc. Selalu eksplisit per perintah.
+  - Jangan sentuh ~/.wine. Semua app baru wajib prefix sendiri di $BASE/.[Nama].
+  - Installer biarkan default C:\Program Files\... (jatuhnya ke <prefix>/drive_c/Program Files/).
+EOF
+}
+
+cmd="${1:-help}"; shift || true
+
+case "$cmd" in
+  list)
+    ls -d "$BASE"/.*/ 2>/dev/null | grep -v -E '/\./$|/\.\./$' || echo "Belum ada prefix di $BASE"
+    ;;
+  path)
+    norm "${1:?}"
+    echo
+    ;;
+  init)
+    P="$(norm "${1:?}")"
+    mkdir -p "$P"
+    echo "Init prefix: $P"
+    WINEPREFIX="$P" wineboot --init
+    echo "OK: $P"
+    echo "Cek: $P/drive_c/Program Files/"
+    ls "$P/drive_c/" || true
+    ;;
+  install)
+    P="$(norm "${1:?}")"; SETUP="${2:?file setup.exe diperlukan}"
+    shift 2
+    [[ -f "$SETUP" ]] || { echo "ERROR: tidak ada file: $SETUP" >&2; exit 1; }
+    [[ -d "$P" ]] || { echo "Prefix belum ada, init dulu: apptricks init $(basename "$P")" >&2; exit 1; }
+    echo "Install '$SETUP' -> '$P'"
+    WINEPREFIX="$P" wine "$SETUP" "$@"
+    ;;
+  run)
+    P="$(norm "${1:?}")"; EXE="${2:?exe diperlukan}"
+    shift 2
+    WINEPREFIX="$P" wine "$EXE" "$@"
+    ;;
+  cfg)
+    P="$(norm "${1:?}")"
+    WINEPREFIX="$P" winecfg
+    ;;
+  explorer)
+    P="$(norm "${1:?}")"
+    WINEPREFIX="$P" wine explorer
+    ;;
+  uninstaller)
+    P="$(norm "${1:?}")"
+    WINEPREFIX="$P" wine uninstaller
+    ;;
+  kill)
+    P="$(norm "${1:?}")"
+    WINEPREFIX="$P" wineserver -k || true
+    echo "killed: $P"
+    ;;
+  help|-h|--help|*)
+    usage
+    ;;
+esac

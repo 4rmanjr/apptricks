@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# apptricks-gui - Zenity GUI untuk apptricks (pola <BASE>/.[NamaApp])
+set -uo pipefail
+# Lokasi prefix: $APPTRICKS_BASE > ~/.config/apptricks/config > default XDG.
+if [[ -z "${APPTRICKS_BASE:-}" && -f "$HOME/.config/apptricks/config" ]]; then
+  # shellcheck disable=SC1090
+  . "$HOME/.config/apptricks/config"
+fi
+BASE="${APPTRICKS_BASE:-$HOME/.local/share/apptricks/prefixes}"
+APPTRICKS_CLI="$HOME/.local/bin/apptricks"
+
+err() { zenity --error --text="$1" 2>/dev/null; }
+info() { zenity --info --text="$1" 2>/dev/null; }
+
+# Saran nama prefix dari nama file setup (generik, tanpa hardcode app).
+# Mapping khusus milik user (opsional) di ~/.config/apptricks/aliases,
+# format per baris: pola=nama   contoh: photoshop=.Photoshop
+suggest_name() {
+  local f; f="$(basename "${1:?}")"
+  local low; low="$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')"
+  local alias_file="$HOME/.config/apptricks/aliases" pat name
+  if [[ -f "$alias_file" ]]; then
+    while IFS='=' read -r pat name; do
+      [[ -z "$pat" || "$pat" == \#* || -z "$name" ]] && continue
+      if [[ "$low" == *"$pat"* ]]; then printf '%s' "$name"; return; fi
+    done < "$alias_file"
+  fi
+  local stem="${f%.*}"
+  # buang kata setup/installer/x86/x64 version generik
+  stem="$(printf '%s' "$stem" | sed -E 's/^(setup[_-]*|installer[_-]*)//I; s/[_-]*(setup|installer|win64|win32|x86|x64)$//I')"
+  # ambil huruf+angka, gabung; misal setup_photoshop2024 -> Photoshop2024
+  local cleaned; cleaned="$(printf '%s' "$stem" | tr -cs 'A-Za-z0-9' ' ')"
+  local out="" w
+  for w in $cleaned; do
+    # kapitalisasi huruf pertama tiap kata
+    w="$(printf '%s' "$w" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
+    out="${out}${w}"
+  done
+  [[ -z "$out" ]] && out="App"
+  printf '.%s' "$out"
+}
+
+list_prefixes() {
+  ls -d "$BASE"/.*/ 2>/dev/null | grep -v -E '/\./$|/\.\./$' | xargs -r -n1 basename 2>/dev/null || true
+}
+
+pick_prefix_or_new() {
+  # $1 = judul. Output: nama prefix (.Nama). Return 1 bila batal.
+  local title="$1" rows=() p
+  while IFS= read -r p; do [[ -n "$p" ]] && rows+=("$p" "prefix ada"); done < <(list_prefixes)
+  rows+=("__NEW__" "Buat prefix baru...")
+  local sel
+  sel="$(zenity --list --title="$title" --column=Prefix --column=Keterangan "${rows[@]}" --width=420 --height=320 2>/dev/null)" || return 1
+  if [[ "$sel" == "__NEW__" ]]; then
+    local sug="${2:-.AppBaru}"
+    local name
+    name="$(zenity --entry --title="Nama prefix baru" --text="Nama prefix (otomatis dot-prefix):" --entry-text="$sug" 2>/dev/null)" || return 1
+    [[ "$name" != .* ]] && name=".$name"
+    printf '%s' "$name"
+  else
+    printf '%s' "$sel"
+  fi
+}
+
+do_install_file() {
+  local setup="${1:?}"
+  [[ -f "$setup" ]] || { err "File tidak ada:\n$setup"; return 1; }
+  local sug; sug="$(suggest_name "$setup")"
+  local prefix
+  prefix="$(pick_prefix_or_new "Install $(basename "$setup") ke..." "$sug")" || return 0
+  # init bila belum ada
+  if [[ ! -d "$BASE/$prefix" ]]; then
+    (echo "# init $prefix"; "$APPTRICKS_CLI" init "$prefix") 2>&1 | zenity --progress --pulsate --auto-close --title="Init $prefix" --text="Membuat prefix..." 2>/dev/null
+  fi
+  "$APPTRICKS_CLI" install "$prefix" "$setup"
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then err "Install gagal (kode $rc)"; return 1; fi
+  info "Selesai install ke $prefix"
+  # Tawarkan launcher: dibuat dari exe ASLI yang dipilih user, bukan ditebak
+  if zenity --question --title="Buatkan launcher?" --text="Buatkan launcher di menu aplikasi untuk prefix $prefix?" 2>/dev/null; then
+    make_launcher "$prefix"
+  fi
+}
+
+# Buat .desktop dari exe yang dipilih user di dalam prefix (tanpa menebak path)
+make_launcher() {
+  local prefix="${1:?}" pname="${prefix#.}"
+  local start="$BASE/$prefix/drive_c/Program Files"
+  [[ -d "$start" ]] || start="$BASE/$prefix/drive_c"
+  local exe
+  exe="$(zenity --file-selection --title="Pilih exe utama untuk launcher" --filename="$start/" --file-filter="Windows exe | *.exe" 2>/dev/null)" || return 0
+  local appname
+  appname="$(zenity --entry --title="Nama launcher" --text="Nama di menu aplikasi:" --entry-text="$pname" 2>/dev/null)" || return 0
+  local desk="$HOME/.local/share/applications/apptricks-${pname}.desktop"
+  cat > "$desk" <<EOF
+[Desktop Entry]
+Type=Application
+Name=$appname
+Comment=Windows app (Wine prefix $prefix)
+Exec=env WINEPREFIX=$BASE/$prefix wine "$exe"
+Icon=wine
+Categories=Emulator;
+Terminal=false
+EOF
+  (kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true)
+  info "Launcher dibuat: $desk"
+}
+
+do_run_one() {
+  local f="${1:?}"
+  local prefix
+  prefix="$(pick_prefix_or_new "Jalankan $(basename "$f") dengan..." ".AppBaru")" || return 0
+  "$APPTRICKS_CLI" run "$prefix" "$f"
+}
+
+do_run_from_prefix() {
+  local prefix
+  prefix="$(pick_prefix_or_new "Jalankan app dari..." ".AppBaru")" || return 0
+  local start="$BASE/$prefix/drive_c/Program Files"
+  [[ -d "$start" ]] || start="$BASE/$prefix/drive_c"
+  local exe
+  exe="$(zenity --file-selection --title="Pilih exe di $prefix" --filename="$start/" --file-filter="Windows exe | *.exe" 2>/dev/null)" || return 0
+  "$APPTRICKS_CLI" run "$prefix" "$exe"
+}
+
+main_menu() {
+  while true; do
+    local c
+    c="$(zenity --list --title="apptricks" --text="Base: $BASE" \
+      --column=Aksi --column=Keterangan \
+      "Install exe" "Pilih setup.exe lalu pilih/buat prefix" \
+      "Jalankan app" "Pilih prefix lalu pilih exe di dalamnya" \
+      "List prefix" "Lihat semua prefix" \
+      "Init prefix baru" "Buat prefix kosong" \
+      "Winecfg" "Konfigurasi prefix" \
+      "Uninstaller" "Daftar program terinstall" \
+      --width=520 --height=360 2>/dev/null)" || break
+    case "$c" in
+      "Install exe")
+        f="$(zenity --file-selection --title="Pilih setup.exe" --file-filter="Windows | *.exe *.msi" 2>/dev/null)" && do_install_file "$f" ;;
+      "Jalankan app") do_run_from_prefix ;;
+      "List prefix")
+        list_prefixes | zenity --text-info --title="Prefix di $BASE" --width=400 --height=300 2>/dev/null ;;
+      "Init prefix baru")
+        n="$(zenity --entry --title="Init prefix" --text="Nama:" --entry-text=".AppBaru" 2>/dev/null)" && "$APPTRICKS_CLI" init "$n" | zenity --text-info --title="Init" --width=500 --height=200 2>/dev/null ;;
+      "Winecfg")
+        p="$(pick_prefix_or_new "Winecfg untuk..." ".AppBaru")" && "$APPTRICKS_CLI" cfg "$p" ;;
+      "Uninstaller")
+        p="$(pick_prefix_or_new "Uninstaller untuk..." ".AppBaru")" && "$APPTRICKS_CLI" uninstaller "$p" ;;
+    esac
+  done
+}
+
+case "${1:-}" in
+  --install) do_install_file "${2:?}" ;;
+  --run-one) do_run_one "${2:?}" ;;
+  --suggest) suggest_name "${2:?}"; echo ;;
+  *) main_menu ;;
+esac

@@ -1,0 +1,6 @@
+# Alias saran nama prefix apptricks (opsional).
+# Format: pola=nama — bila nama file setup mengandung <pola> (huruf kecil),
+# apptricks-gui menyarankan <nama> sebagai nama prefix.
+# Contoh (hapus tanda # untuk mengaktifkan):
+# photoshop=.Photoshop
+# msvc=.MSVC

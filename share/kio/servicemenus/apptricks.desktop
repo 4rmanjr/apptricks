@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Service
+X-KDE-ServiceTypes=KonqPopupMenu/Plugin
+MimeType=application/x-ms-dos-executable;application/x-msi;
+Actions=installWithPrefix;runWithPrefix;
+X-KDE-AuthorizeAction=shell_access
+
+[Desktop Action installWithPrefix]
+Name=Install ke Prefix... (apptricks)
+Icon=wine
+Exec=__HOME__/.local/bin/apptricks-gui --install %f
+
+[Desktop Action runWithPrefix]
+Name=Jalankan dengan Prefix... (apptricks)
+Icon=wine
+Exec=__HOME__/.local/bin/apptricks-gui --run-one %f

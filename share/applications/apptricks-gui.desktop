@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=apptricks
+Comment=Kelola Wine prefix per-app: 1 app = 1 prefix terisolasi (Zenity GUI)
+Exec=__HOME__/.local/bin/apptricks-gui
+Icon=wine
+Categories=System;Emulator;
+Terminal=false

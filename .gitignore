@@ -1,0 +1,7 @@
+# apptricks: file user tidak pernah masuk repo.
+# Yang terinstall di mesin (prefix, alias aktif, config BASE) tinggal di $HOME,
+# bukan di sini. Jika ragu, jangan git add file di luar daftar berikut:
+#   setup.sh uninstall.sh README.md LICENSE .gitignore
+#   bin/ share/ config/aliases.example docs/
+*~
+.DS_Store
