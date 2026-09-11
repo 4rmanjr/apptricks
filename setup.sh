@@ -14,7 +14,7 @@
 #
 set -uo pipefail
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOTAL=8
 STEP=0
@@ -152,10 +152,7 @@ elif [[ -f "$CONFIG_FILE" ]]; then
   . "$CONFIG_FILE"
   if [[ -n "${APPTRICKS_BASE:-}" ]]; then PROPOSED="$APPTRICKS_BASE"; PROPOSE_WHY="config lama ($CONFIG_FILE)"; fi
 fi
-if [[ -z "$PROPOSED" && -d "/mnt/data/ProgramFiles" ]]; then
-  PROPOSED="/mnt/data/ProgramFiles"; PROPOSE_WHY="direktori lama ditemukan"
-fi
-[[ -z "$PROPOSED" ]] && PROPOSED="$DEFAULT_BASE" && PROPOSE_WHY="default"
+if [[ -z "$PROPOSED" ]]; then PROPOSED="$DEFAULT_BASE"; PROPOSE_WHY="default"; fi
 info "usulan: $PROPOSED ($PROPOSE_WHY)"
 BASE="$(ask "pakai lokasi ini" "$PROPOSED")"
 [[ -z "$BASE" ]] && die "BASE tidak boleh kosong"
@@ -163,10 +160,6 @@ mkdir -p "$CONFIG_DIR" "$BASE" || die "tidak bisa membuat $BASE"
 printf '# Konfigurasi apptricks (dibuat oleh setup.sh v%s)\nAPPTRICKS_BASE="%s"\n' "$VERSION" "$BASE" > "$CONFIG_FILE" \
   && ok "config ditulis: $CONFIG_FILE" || die "gagal menulis config"
 ok "BASE siap: $BASE ($(ls -d "$BASE"/.*/ 2>/dev/null | grep -vc -E '/\./$|/\.\./$' || true) prefix lama terdeteksi, tidak diutak-atik)"
-# migrasi alias dari generasi lama (winepf) bila ada
-if [[ ! -f "$CONFIG_DIR/aliases" && -f "$HOME/.config/winepf/aliases" ]]; then
-  cp "$HOME/.config/winepf/aliases" "$CONFIG_DIR/aliases" && ok "migrasi alias lama dari ~/.config/winepf/aliases"
-fi
 
 # ---------------- [4/8] binary ----------------
 step "Install binary ke ~/.local/bin"
@@ -212,6 +205,13 @@ bash -n "$HOME/.local/bin/apptricks-gui" && ok "syntax apptricks-gui valid" || d
 "$HOME/.local/bin/apptricks" help >/dev/null 2>&1 && ok "apptricks help jalan" || die "apptricks tidak bisa jalan"
 SUG_OUT="$("$HOME/.local/bin/apptricks-gui" --suggest "/tmp/setup_contoh2024.exe" 2>/dev/null)" || SUG_OUT=""
 if [[ "$SUG_OUT" == ".Contoh2024" ]]; then ok "smoke test saran nama: $SUG_OUT"; else warn "smoke test saran nama janggal: '$SUG_OUT' (fungsi tetap terinstall)"; fi
+if [[ $NO_DESKTOP -eq 0 ]]; then
+  if [[ -x "$HOME/.local/share/applications/apptricks-gui.desktop" && -x "$HOME/.local/share/kio/servicemenus/apptricks.desktop" ]]; then
+    ok "executable bit .desktop terverifikasi (syarat eksekusi KDE)"
+  else
+    fail "executable bit .desktop hilang — klik kanan/menu akan ditolak KDE"
+  fi
+fi
 if [[ ":$PATH:" == *":$HOME/.local/bin:"* ]]; then ok "~/.local/bin ada di PATH"; else warn "~/.local/bin belum di PATH — tambah ke ~/.bashrc lalu buka terminal baru"; fi
 have wine || warn "wine belum terinstall — 'apptricks init/install' butuh wine"
 have zenity || warn "zenity belum terinstall — GUI butuh zenity (CLI tetap jalan)"
@@ -225,5 +225,5 @@ printf '  %s│%s  config   : %s\n' "$BLD$GRN" "$RST" "$CONFIG_FILE"
 printf '  %s└────────────────────────────────────────%s\n' "$BLD$GRN" "$RST"
 printf '\n  Langkah berikutnya:\n'
 printf '    apptricks init .AppKu && apptricks install .AppKu ~/Downloads/setup.exe\n'
-printf '    # atau: klik kanan setup.exe di Dolphin → Install ke Prefix...\n'
+printf '    # atau: klik kanan setup.exe di Dolphin → Install to Prefix...\n'
 printf '    # hapus total: ./uninstall.sh  (di direktori repo ini)\n\n'
