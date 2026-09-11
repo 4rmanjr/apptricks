@@ -90,6 +90,9 @@ Run with Prefix... Setelah install/ubah, `setup.sh` me-refresh
 `kbuildsycoca6/5` otomatis. `Run with` = jalankan exe dengan konteks prefix
 (tanpa install); bila exe di luar prefix, tawarkan impor portable
 (`import_portable()` → salin folder ke `drive_c/Portable/<App>/`).
+WAJIB `chmod +x` semua .desktop user-local (service-menu, launcher manager,
+launcher per-app) — KDE/KIO menolak eksekusi tanpanya ("not owned by root and
+executable flag not set"). `setup.sh` dan `make_launcher()` sudah otomatis.
 
 Launcher per-app (`apptricks-<Nama>.desktop`) DITAWARKAN OTOMATIS dengan
 pilihan lokasi (`offer_launcher()`): menu / Desktop / keduanya. Desktop =

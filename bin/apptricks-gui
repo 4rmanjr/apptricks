@@ -122,7 +122,7 @@ EOF
     menu|both)
       mkdir -p "$HOME/.local/share/applications"
       desk="$HOME/.local/share/applications/apptricks-${pname}.desktop"
-      printf '%s\n' "$content" > "$desk"; made+=("$desk") ;;
+      printf '%s\n' "$content" > "$desk"; chmod +x "$desk"; made+=("$desk") ;; # +x: syarat eksekusi KDE
   esac
   case "$where" in
     desktop|both)

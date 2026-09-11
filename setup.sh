@@ -187,6 +187,10 @@ else
     && ok "launcher: ~/.local/share/applications/apptricks-gui.desktop"
   sed "s|__HOME__|$HOME|g" "$REPO_DIR/share/kio/servicemenus/apptricks.desktop" > "$HOME/.local/share/kio/servicemenus/apptricks.desktop" \
     && ok "service menu: ~/.local/share/kio/servicemenus/apptricks.desktop"
+  # KDE menolak eksekusi .desktop user-local tanpa executable bit
+  # ("not owned by root and executable flag not set").
+  chmod +x "$HOME/.local/share/applications/apptricks-gui.desktop" "$HOME/.local/share/kio/servicemenus/apptricks.desktop" \
+    && ok "executable bit untuk .desktop (syarat eksekusi KDE)"
   if have kbuildsycoca6; then kbuildsycoca6 >/dev/null 2>&1 && ok "refresh menu (kbuildsycoca6)" || warn "refresh kbuildsycoca6 gagal (tidak fatal)";
   elif have kbuildsycoca5; then kbuildsycoca5 >/dev/null 2>&1 && ok "refresh menu (kbuildsycoca5)" || warn "refresh kbuildsycoca5 gagal (tidak fatal)";
   else skip "refresh menu KDE (kbuildsycoca tak ada)"; fi
