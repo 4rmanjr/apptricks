@@ -76,23 +76,38 @@ do_install_file() {
   local rc=$?
   if [[ $rc -ne 0 ]]; then err "Install gagal (kode $rc)"; return 1; fi
   info "Selesai install ke $prefix"
-  # Tawarkan launcher: dibuat dari exe ASLI yang dipilih user, bukan ditebak
-  if zenity --question --title="Buatkan launcher?" --text="Buatkan launcher di menu aplikasi untuk prefix $prefix?" 2>/dev/null; then
-    make_launcher "$prefix"
-  fi
+  # Tawarkan launcher dari exe ASLI yang dipilih user, bukan ditebak
+  offer_launcher "$prefix" ""
 }
 
-# Buat .desktop dari exe yang dipilih user di dalam prefix (tanpa menebak path)
+# Tawarkan + buat launcher. $2 boleh kosong → user menunjuk exe di dalam prefix.
+offer_launcher() {
+  local prefix="${1:?}" exe="${2:-}"
+  local pname="${prefix#.}"
+  if [[ -z "$exe" ]]; then
+    local start="$BASE/$prefix/drive_c/Program Files"
+    [[ -d "$start" ]] || start="$BASE/$prefix/drive_c"
+    exe="$(zenity --file-selection --title="Pilih exe utama untuk launcher" --filename="$start/" --file-filter="Windows exe | *.exe" 2>/dev/null)" || return 0
+  fi
+  local where
+  where="$(zenity --list --title="Buatkan launcher?" --text="Launcher untuk $pname:" \
+    --column=Pilihan --column=Keterangan \
+    "menu" "Di menu aplikasi" \
+    "desktop" "Di Desktop" \
+    "both" "Keduanya" \
+    --width=480 --height=260 2>/dev/null)" || return 0
+  make_launcher "$prefix" "$exe" "$where"
+}
+
+# Buat file .desktop di lokasi: menu | desktop | both.
 make_launcher() {
-  local prefix="${1:?}" pname="${prefix#.}"
-  local start="$BASE/$prefix/drive_c/Program Files"
-  [[ -d "$start" ]] || start="$BASE/$prefix/drive_c"
-  local exe
-  exe="$(zenity --file-selection --title="Pilih exe utama untuk launcher" --filename="$start/" --file-filter="Windows exe | *.exe" 2>/dev/null)" || return 0
+  local prefix="${1:?}" exe="${2:?}" where="${3:-menu}"
+  local pname="${prefix#.}"
   local appname
-  appname="$(zenity --entry --title="Nama launcher" --text="Nama di menu aplikasi:" --entry-text="$pname" 2>/dev/null)" || return 0
-  local desk="$HOME/.local/share/applications/apptricks-${pname}.desktop"
-  cat > "$desk" <<EOF
+  appname="$(zenity --entry --title="Nama launcher" --text="Nama launcher:" --entry-text="$pname" 2>/dev/null)" || return 0
+  appname="${appname//\//-}"
+  local content desk made=() note=""
+  content="$(cat <<EOF
 [Desktop Entry]
 Type=Application
 Name=$appname
@@ -102,8 +117,22 @@ Icon=wine
 Categories=Emulator;
 Terminal=false
 EOF
+)"
+  case "$where" in
+    menu|both)
+      mkdir -p "$HOME/.local/share/applications"
+      desk="$HOME/.local/share/applications/apptricks-${pname}.desktop"
+      printf '%s\n' "$content" > "$desk"; made+=("$desk") ;;
+  esac
+  case "$where" in
+    desktop|both)
+      mkdir -p "$HOME/Desktop"
+      desk="$HOME/Desktop/${appname}.desktop"
+      printf '%s\n' "$content" > "$desk"; chmod +x "$desk"; made+=("$desk")
+      note="\n\nCatatan: di Desktop, double-click pertama pilih Trust and Launch." ;;
+  esac
   (kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true)
-  info "Launcher dibuat: $desk"
+  info "Launcher dibuat:\n$(printf '%s\n' "${made[@]}")$note"
 }
 
 do_run_one() {
@@ -111,7 +140,7 @@ do_run_one() {
   local prefix
   prefix="$(pick_prefix_or_new "Jalankan $(basename "$f") dengan..." ".AppBaru")" || return 0
   # Portable di luar prefix? Tawarkan impor agar mandiri di dalam prefix.
-  local real_f; real_f="$(realpath -m "$f" 2>/dev/null || printf '%s' "$f")"
+  local real_f imported=""; real_f="$(realpath -m "$f" 2>/dev/null || printf '%s' "$f")"
   if [[ "$real_f" != "$BASE/$prefix"/* ]]; then
     local srcdir size
     srcdir="$(dirname "$real_f")"
@@ -119,7 +148,12 @@ do_run_one() {
     if zenity --question --title="Portable di luar prefix" --width=480 \
       --text="Exe ini di luar prefix:\n$real_f\n(folder sumber: $size)\n\nSalin ke dalam prefix agar mandiri?\nYa = salin ke $prefix/drive_c/Portable/ lalu jalankan dari sana.\nTidak = langsung jalankan di tempat." 2>/dev/null; then
       f="$(import_portable "$real_f" "$prefix")" || return 0
+      imported=1
     fi
+  fi
+  # Hasil impor: tawarkan launcher (exe sudah pasti, tanpa file-selection)
+  if [[ -n "$imported" ]]; then
+    offer_launcher "$prefix" "$f" || true
   fi
   "$APPTRICKS_CLI" run "$prefix" "$f"
 }

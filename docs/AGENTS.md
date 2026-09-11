@@ -91,10 +91,13 @@ Run with Prefix... Setelah install/ubah, `setup.sh` me-refresh
 (tanpa install); bila exe di luar prefix, tawarkan impor portable
 (`import_portable()` → salin folder ke `drive_c/Portable/<App>/`).
 
-Launcher per-app (`apptricks-<Nama>.desktop`) DIBUAT OTOMATIS: setelah install
-sukses `apptricks-gui` menawarkan "Buatkan launcher?" lalu user menunjuk exe
-utama yang benar-benar ada di dalam prefix (`make_launcher()`). JANGAN pernah
-membuat .desktop per-app dengan menebak path exe sebelum install terbukti.
+Launcher per-app (`apptricks-<Nama>.desktop`) DITAWARKAN OTOMATIS dengan
+pilihan lokasi (`offer_launcher()`): menu / Desktop / keduanya. Desktop =
+`~/Desktop/<Nama>.desktop` + `chmod +x` (Plasma: double-click pertama pilih
+Trust and Launch). Ditawarkan setelah install sukses (user menunjuk exe utama
+via file-selection) dan setelah impor portable sukses (exe sudah diketahui).
+JANGAN pernah membuat .desktop per-app dengan menebak path exe sebelum
+install/impor terbukti berhasil.
 
 Aturan saran nama (`suggest_name()`, generik): buang ekstensi + kata
 setup/installer + arsitektur, gabung alnum, kapitalisasi tiap kata
