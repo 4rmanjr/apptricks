@@ -65,6 +65,12 @@ WINEPREFIX="<BASE>/.AppKu" wineserver -k
 Prefix corrupt → hapus isi prefix lalu `apptricks init` ulang.
 Jangan coba repair registry manual.
 
+Installer keluar non-nol (mis. kode 1) padahal app terinstall & jalan =
+NORMAL (installer NSIS/dkk rutin begitu di Wine). GUI menanganinya via
+`handle_install_rc()`: info + tetap tawarkan launcher; hanya batal bila
+prefix hilang. Bukti/lacak: `<prefix>/apptricks-install.log` (ditulis via
+`tee`, exit code asli wine tetap diteruskan berkat `pipefail`).
+
 ## 5. Struktur
 
 ```

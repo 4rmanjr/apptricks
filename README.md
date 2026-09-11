@@ -67,6 +67,9 @@ the installer runs inside it, and you're offered a launcher afterwards.
   (no install). Exes outside the prefix trigger the portable-import offer.
 - Launchers are always built from an exe that is proven to exist —
   never from guessed paths.
+- A nonzero installer exit code (e.g. 1) with the app working is **normal**
+  under Wine — the GUI tells you so and still offers a launcher.
+  Trace: `<prefix>/apptricks-install.log`.
 
 ## Configuration (`~/.config/apptricks/`)
 

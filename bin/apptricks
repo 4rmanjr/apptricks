@@ -70,7 +70,9 @@ case "$cmd" in
     [[ -f "$SETUP" ]] || { echo "ERROR: tidak ada file: $SETUP" >&2; exit 1; }
     [[ -d "$P" ]] || { echo "Prefix belum ada, init dulu: apptricks init $(basename "$P")" >&2; exit 1; }
     echo "Install '$SETUP' -> '$P'"
-    WINEPREFIX="$P" wine "$SETUP" "$@"
+    echo "Log: $P/apptricks-install.log"
+    # pipefail aktif (set -euo pipefail): exit code = milik wine, bukan tee.
+    WINEPREFIX="$P" wine "$SETUP" "$@" 2>&1 | tee -a "$P/apptricks-install.log"
     ;;
   run)
     P="$(norm "${1:?}")"; EXE="${2:?exe diperlukan}"

@@ -74,10 +74,26 @@ do_install_file() {
   fi
   "$APPTRICKS_CLI" install "$prefix" "$setup"
   local rc=$?
-  if [[ $rc -ne 0 ]]; then err "Install gagal (kode $rc)"; return 1; fi
-  info "Selesai install ke $prefix"
+  handle_install_rc "$rc" "$prefix" || return 1
   # Tawarkan launcher dari exe ASLI yang dipilih user, bukan ditebak
   offer_launcher "$prefix" ""
+}
+
+# Nilai exit installer: banyak installer Windows (NSIS dkk) rutin keluar
+# non-nol padahal sukses di bawah Wine. Jadi non-nol = info, bukan vonis.
+# Return 0 = lanjut tawarkan launcher; 1 = batal total (misal prefix hilang).
+handle_install_rc() {
+  local rc="${1:?}" prefix="${2:?}"
+  if [[ ! -d "$BASE/$prefix" ]]; then
+    err "Prefix $prefix hilang setelah install (kode $rc). Cek $BASE."
+    return 1
+  fi
+  if [[ "$rc" -eq 0 ]]; then
+    info "Selesai install ke $prefix"
+  else
+    info "Installer selesai (kode keluar: $rc).\nKode non-nol umum terjadi dan bukan berarti gagal — app biasanya tetap terinstall.\nLog: $BASE/$prefix/apptricks-install.log"
+  fi
+  return 0
 }
 
 # Tawarkan + buat launcher. $2 boleh kosong → user menunjuk exe di dalam prefix.
