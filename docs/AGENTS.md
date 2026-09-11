@@ -70,6 +70,8 @@ Jangan coba repair registry manual.
 ```
 <BASE>/
   .AppKu/              # WINEPREFIX: drive_c/, system.reg, user.reg, dosdevices/
+    drive_c/Program Files/...   # hasil installer
+    drive_c/Portable/...        # hasil impor portable (import_portable)
   .NamaAppLain/        # app berikutnya, pola sama
 ~/.local/bin/apptricks{,-gui}   # hasil install setup.sh (jangan edit langsung)
 ~/.config/apptricks/config      # APPTRICKS_BASE="..."
@@ -83,9 +85,11 @@ app / List / Init / Winecfg / Uninstaller. Argumen headless untuk service menu:
 `apptricks-gui --install <file>`, `--run-one <file>`, `--suggest <file>`.
 
 Klik-kanan Dolphin: `share/kio/servicemenus/apptricks.desktop`
-(`KonqPopupMenu/Plugin`, Mime exe+msi): Install ke Prefix... /
-Jalankan dengan Prefix... Setelah install/ubah, `setup.sh` me-refresh
-`kbuildsycoca6/5` otomatis.
+(`KonqPopupMenu/Plugin`, Mime exe+msi, label Inggris): Install to Prefix... /
+Run with Prefix... Setelah install/ubah, `setup.sh` me-refresh
+`kbuildsycoca6/5` otomatis. `Run with` = jalankan exe dengan konteks prefix
+(tanpa install); bila exe di luar prefix, tawarkan impor portable
+(`import_portable()` → salin folder ke `drive_c/Portable/<App>/`).
 
 Launcher per-app (`apptricks-<Nama>.desktop`) DIBUAT OTOMATIS: setelah install
 sukses `apptricks-gui` menawarkan "Buatkan launcher?" lalu user menunjuk exe

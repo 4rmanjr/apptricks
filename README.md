@@ -13,7 +13,8 @@ klik-kanan ala Windows.
 
 - **CLI** `apptricks`: `list init install run cfg explorer uninstaller kill path`
 - **GUI Zenity** `apptricks-gui`: menu lengkap + saran nama prefix otomatis
-- **Klik kanan di Dolphin**: `Install ke Prefix...` / `Jalankan dengan Prefix...`
+- **Klik kanan di Dolphin**: `Install to Prefix...` / `Run with Prefix...`
+- **Impor portable**: exe di luar prefix ditawari disalin ke `drive_c/Portable/` agar mandiri
 - **Launcher otomatis**: setelah install sukses, ditawari buatkan `.desktop`
 - **Lokasi prefix bisa diatur** (`APPTRICKS_BASE` / file config), default XDG
 - **`~/.wine` tidak pernah disentuh**

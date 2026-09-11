@@ -110,7 +110,41 @@ do_run_one() {
   local f="${1:?}"
   local prefix
   prefix="$(pick_prefix_or_new "Jalankan $(basename "$f") dengan..." ".AppBaru")" || return 0
+  # Portable di luar prefix? Tawarkan impor agar mandiri di dalam prefix.
+  local real_f; real_f="$(realpath -m "$f" 2>/dev/null || printf '%s' "$f")"
+  if [[ "$real_f" != "$BASE/$prefix"/* ]]; then
+    local srcdir size
+    srcdir="$(dirname "$real_f")"
+    size="$(du -sh "$srcdir" 2>/dev/null | cut -f1)"
+    if zenity --question --title="Portable di luar prefix" --width=480 \
+      --text="Exe ini di luar prefix:\n$real_f\n(folder sumber: $size)\n\nSalin ke dalam prefix agar mandiri?\nYa = salin ke $prefix/drive_c/Portable/ lalu jalankan dari sana.\nTidak = langsung jalankan di tempat." 2>/dev/null; then
+      f="$(import_portable "$real_f" "$prefix")" || return 0
+    fi
+  fi
   "$APPTRICKS_CLI" run "$prefix" "$f"
+}
+
+# Salin folder portable ke <prefix>/drive_c/Portable/<Nama>/ (dengan progress).
+# Cetak path exe baru. Idempoten: bila sudah ada, pakai yang ada.
+import_portable() {
+  local src="${1:?}" prefix="${2:?}"
+  local srcdir app dest newexe
+  srcdir="$(dirname "$src")"; app="$(basename "$srcdir")"
+  dest="$BASE/$prefix/drive_c/Portable/$app"
+  newexe="$dest/$(basename "$src")"
+  if [[ -f "$newexe" ]]; then
+    printf '%s' "$newexe"; return 0
+  fi
+  mkdir -p "$dest" || return 1
+  if command -v rsync >/dev/null 2>&1; then
+    (rsync -a --exclude="$(basename "$dest")" "$srcdir"/ "$dest"/) 2>&1 \
+      | zenity --progress --pulsate --auto-close --title="Impor portable" --text="Menyalin ke $prefix..." 2>/dev/null
+  else
+    (cp -a "$srcdir"/. "$dest"/) 2>&1 \
+      | zenity --progress --pulsate --auto-close --title="Impor portable" --text="Menyalin ke $prefix..." 2>/dev/null
+  fi
+  [[ -f "$newexe" ]] || return 1
+  printf '%s' "$newexe"
 }
 
 do_run_from_prefix() {
