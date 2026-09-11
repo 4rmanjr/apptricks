@@ -6,11 +6,11 @@ Actions=installWithPrefix;runWithPrefix;
 X-KDE-AuthorizeAction=shell_access
 
 [Desktop Action installWithPrefix]
-Name=Install ke Prefix... (apptricks)
+Name=Install to Prefix... (apptricks)
 Icon=wine
 Exec=__HOME__/.local/bin/apptricks-gui --install %f
 
 [Desktop Action runWithPrefix]
-Name=Jalankan dengan Prefix... (apptricks)
+Name=Run with Prefix... (apptricks)
 Icon=wine
 Exec=__HOME__/.local/bin/apptricks-gui --run-one %f
