@@ -113,6 +113,86 @@ offer_launcher() {
     "both" "Keduanya" \
     --width=480 --height=260 2>/dev/null)" || return 0
   make_launcher "$prefix" "$exe" "$where"
+  cleanup_wine_dupes "$prefix" "$exe"
+}
+
+# Hapus entri otomatis Wine yang menduplikasi launcher apptricks:
+# .desktop di applications/wine + ~/Desktop yang menunjuk ke prefix ini
+# DAN ke folder app yang sama dengan $2. Checklist, default centang kecuali
+# *uninstall*. MetaEditor dkk aman (tidak tercentang bila namanya mengandung
+# uninstall; sisanya user yang putuskan per centang).
+cleanup_wine_dupes() {
+  local prefix="${1:?}" exe="${2:?}"
+  local appdir bs_pat
+  appdir="$(realpath -m "$exe")"
+  appdir="${appdir#"$BASE/$prefix"/drive_c/}"
+  appdir="$(dirname "$appdir")"
+  bs_pat="${appdir//\//\\\\}"
+  local cands=() f
+  while IFS= read -r f; do
+    grep -q "WINEPREFIX=$BASE/$prefix" "$f" 2>/dev/null || continue
+    if grep -qiF "$appdir" "$f" 2>/dev/null || grep -qiF "$bs_pat" "$f" 2>/dev/null; then
+      cands+=("$f")
+    fi
+  done < <(find "$HOME/.local/share/applications/wine" "$HOME/Desktop" -name '*.desktop' 2>/dev/null)
+  [[ ${#cands[@]} -eq 0 ]] && return 0
+  local rows=() b
+  for f in "${cands[@]}"; do
+    b="$(basename "$f")"
+    if [[ "$b" == *[Uu]ninstall* ]]; then rows+=(FALSE "$b"); else rows+=(TRUE "$b"); fi
+  done
+  local sel
+  sel="$(zenity --list --checklist --title="Bersihkan duplikat Wine?" \
+    --text="Entri otomatis Wine untuk folder $appdir sudah digantikan launcher apptricks.\nCentang yang mau dihapus:" \
+    --column=Hapus --column=File "${rows[@]}" --width=540 --height=300 --separator=$'\n' 2>/dev/null)" || return 0
+  local x gone=0
+  while IFS= read -r x; do
+    [[ -z "$x" ]] && continue
+    for f in "${cands[@]}"; do
+      if [[ "$(basename "$f")" == "$x" ]]; then rm -f "$f" && gone=$((gone + 1)); fi
+    done
+  done <<< "$sel"
+  if [[ $gone -gt 0 ]]; then
+    (kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true)
+    info "$gone entri Wine dihapus."
+  fi
+}
+
+# Cari icon untuk launcher. Urutan: (1) icon hasil ekstrak Wine yang cocok
+# dengan nama exe, (2) ekstrak sendiri via icoutils bila ada,
+# (3) fallback "wine". Cetak NAMA icon (tanpa path/ekstensi).
+find_app_icon() {
+  local exe="${1:?}" pname="${2:?}"
+  local stem lc f
+  stem="$(basename "$exe" .exe)"
+  lc="$(printf '%s' "$stem" | tr '[:upper:]' '[:lower:]')"
+  # (1) icon ekstrak Wine yang sudah ada
+  f="$(find "$HOME/.local/share/icons" -iname "*${lc}*" \( -name '*.png' -o -name '*.xpm' \) 2>/dev/null | head -1)"
+  if [[ -n "$f" ]]; then
+    basename "$f" | sed 's/\.[^.]*$//'
+    return 0
+  fi
+  # (2) ekstrak dari exe (butuh paket icoutils: wrestool + icotool)
+  if command -v wrestool >/dev/null 2>&1 && command -v icotool >/dev/null 2>&1; then
+    local tmp outdir best
+    tmp="$(mktemp -d 2>/dev/null)" || tmp=""
+    if [[ -n "$tmp" && -d "$tmp" ]] \
+      && wrestool -x -t14 "$exe" -o "$tmp/icon.ico" >/dev/null 2>&1 \
+      && icotool -x -o "$tmp" "$tmp/icon.ico" >/dev/null 2>&1; then
+      best="$(find "$tmp" -maxdepth 1 -name '*.png' -printf '%s %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
+      if [[ -n "${best:-}" && -f "$best" ]]; then
+        outdir="$HOME/.local/share/icons/hicolor/256x256/apps"
+        mkdir -p "$outdir" 2>/dev/null \
+          && cp "$best" "$outdir/apptricks-${pname}.png" 2>/dev/null \
+          && printf 'apptricks-%s' "$pname" || printf 'wine'
+        rm -rf "$tmp"
+        return 0
+      fi
+    fi
+    [[ -n "${tmp:-}" ]] && rm -rf "$tmp"
+  fi
+  # (3) fallback
+  printf 'wine'
 }
 
 # Buat file .desktop di lokasi: menu | desktop | both.
@@ -122,14 +202,14 @@ make_launcher() {
   local appname
   appname="$(zenity --entry --title="Nama launcher" --text="Nama launcher:" --entry-text="$pname" 2>/dev/null)" || return 0
   appname="${appname//\//-}"
+  local icon; icon="$(find_app_icon "$exe" "$pname")"
   local content desk made=() note=""
   content="$(cat <<EOF
 [Desktop Entry]
 Type=Application
 Name=$appname
-Comment=Windows app (Wine prefix $prefix)
 Exec=env WINEPREFIX=$BASE/$prefix wine "$exe"
-Icon=wine
+Icon=$icon
 Categories=Emulator;
 Terminal=false
 EOF

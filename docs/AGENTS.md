@@ -109,8 +109,13 @@ pilihan lokasi (`offer_launcher()`): menu / Desktop / keduanya. Desktop =
 `~/Desktop/<Nama>.desktop` + `chmod +x` (Plasma: double-click pertama pilih
 Trust and Launch). Ditawarkan setelah install sukses (user menunjuk exe utama
 via file-selection) dan setelah impor portable sukses (exe sudah diketahui).
-JANGAN pernah membuat .desktop per-app dengan menebak path exe sebelum
-install/impor terbukti berhasil.
+Icon via `find_app_icon()`: (1) cocokkan icon ekstrak Wine, (2) ekstrak dari
+exe via icoutils → `apptricks-<Nama>.png`, (3) fallback `wine`. TANPA Comment
+(agar nama tampil bersih di menu). JANGAN pernah membuat .desktop per-app
+dengan menebak path exe sebelum install/impor terbukti berhasil.
+Setelah launcher dibuat, `cleanup_wine_dupes()` menawarkan checklist hapus
+entri otomatis Wine untuk folder app yang sama (default centang kecuali
+*uninstall*).
 
 Aturan saran nama (`suggest_name()`, generik): buang ekstensi + kata
 setup/installer + arsitektur, gabung alnum, kapitalisasi tiap kata

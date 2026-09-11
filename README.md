@@ -21,6 +21,9 @@ and settings. Delete a prefix = fully uninstall that app.
   `drive_c/Portable/` so it becomes self-contained
 - **Launchers on demand** — after install/import, pick the location:
   app menu, Desktop, or both (never guessed paths, always your real exe)
+- **Real exe icons** — extracted via `icoutils` when available (offered by setup)
+- **No duplicate auto-entries** — after our launcher is made, Wine's own
+  entries for the same app are offered for deletion via checklist
 - **Portable base dir** — override via `$APPTRICKS_BASE` or
   `~/.config/apptricks/config`, sensible XDG default
 - **No duplicate auto-entries** — Wine's `winemenubuilder` is disabled;

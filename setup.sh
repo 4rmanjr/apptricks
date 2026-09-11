@@ -117,6 +117,8 @@ else
   done
   if have kbuildsycoca6 || have kbuildsycoca5; then ok "refresh menu KDE tersedia"; else skip "kbuildsycoca tak ada (bukan KDE? refresh menu dilewati nanti)"; fi
   if have update-desktop-database; then ok "update-desktop-database tersedia"; else skip "update-desktop-database tak ada (opsional)"; fi
+  ICO_MISSING=0
+  if have wrestool && have icotool; then ok "ekstrak icon exe (icoutils) tersedia"; else warn "icoutils tak ada — launcher pakai icon generik (opsional)"; ICO_MISSING=1; fi
   if [[ ${#MISSING[@]} -gt 0 ]]; then
     if [[ -z "$PM" ]]; then
       warn "install manual paket ini: ${MISSING[*]} — lanjut tanpa mereka"
@@ -134,6 +136,17 @@ else
       fi
     else
       warn "dilewati user — init/install prefix butuh wine, GUI butuh zenity"
+    fi
+  fi
+  if [[ $ICO_MISSING -eq 1 && -n "$PM" ]] && have sudo; then
+    if ask_yes_no "install icoutils (icon asli exe untuk launcher)" "y"; then
+      info "menjalankan installer paket (mungkin minta password sudo)..."
+      case "$PM" in
+        pacman) sudo pacman -S --needed --noconfirm icoutils && ok "icoutils terinstall" || warn "install icoutils gagal (tidak fatal)" ;;
+        apt) sudo apt-get update && sudo apt-get install -y icoutils && ok "icoutils terinstall" || warn "install icoutils gagal (tidak fatal)" ;;
+        dnf) sudo dnf install -y icoutils && ok "icoutils terinstall" || warn "install icoutils gagal (tidak fatal)" ;;
+        zypper) sudo zypper install -y icoutils && ok "icoutils terinstall" || warn "install icoutils gagal (tidak fatal)" ;;
+      esac
     fi
   fi
 fi
