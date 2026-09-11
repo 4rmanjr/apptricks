@@ -3,7 +3,6 @@ Type=Service
 X-KDE-ServiceTypes=KonqPopupMenu/Plugin
 MimeType=application/x-ms-dos-executable;application/x-msi;
 Actions=installWithPrefix;runWithPrefix;
-X-KDE-AuthorizeAction=shell_access
 
 [Desktop Action installWithPrefix]
 Name=Install to Prefix... (apptricks)
