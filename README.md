@@ -23,6 +23,8 @@ and settings. Delete a prefix = fully uninstall that app.
   app menu, Desktop, or both (never guessed paths, always your real exe)
 - **Portable base dir** — override via `$APPTRICKS_BASE` or
   `~/.config/apptricks/config`, sensible XDG default
+- **No duplicate auto-entries** — Wine's `winemenubuilder` is disabled;
+  launchers come only from apptricks (override: `WINEMENUBUILDER=1`)
 - **`~/.wine` is never touched**, no `sudo` for wine operations
 
 ## Requirements

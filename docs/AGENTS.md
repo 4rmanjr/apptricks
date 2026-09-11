@@ -100,6 +100,10 @@ WAJIB `chmod +x` semua .desktop user-local (service-menu, launcher manager,
 launcher per-app) — KDE/KIO menolak eksekusi tanpanya ("not owned by root and
 executable flag not set"). `setup.sh` dan `make_launcher()` sudah otomatis.
 
+`bin/apptricks` menonaktifkan `winemenubuilder.exe` via `WINEDLLOVERRIDES`
+agar Wine tidak membuat entri menu/Desktop otomatis yang menduplikasi
+launcher apptricks. Override per-perintah: `WINEMENUBUILDER=1 apptricks ...`.
+
 Launcher per-app (`apptricks-<Nama>.desktop`) DITAWARKAN OTOMATIS dengan
 pilihan lokasi (`offer_launcher()`): menu / Desktop / keduanya. Desktop =
 `~/Desktop/<Nama>.desktop` + `chmod +x` (Plasma: double-click pertama pilih

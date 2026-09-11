@@ -11,6 +11,12 @@ if [[ -z "${APPTRICKS_BASE:-}" && -f "$HOME/.config/apptricks/config" ]]; then
 fi
 BASE="${APPTRICKS_BASE:-$HOME/.local/share/apptricks/prefixes}"
 
+# Cegah Wine membuat entri menu/Desktop otomatis (winemenubuilder) yang
+# menduplikasi launcher apptricks. Override bila perlu: WINEMENUBUILDER=1.
+if [[ "${WINEMENUBUILDER:-0}" != "1" ]]; then
+  export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+$WINEDLLOVERRIDES;}winemenubuilder.exe=d"
+fi
+
 norm() {
   local n="${1:?nama prefix diperlukan, cth: .MT5XM atau MT5XM}"
   [[ "$n" != .* ]] && n=".$n"
@@ -42,6 +48,8 @@ Catatan:
   - Jangan set WINEPREFIX global di .bashrc. Selalu eksplisit per perintah.
   - Jangan sentuh ~/.wine. Semua app baru wajib prefix sendiri di $BASE/.[Nama].
   - Installer biarkan default C:\Program Files\... (jatuhnya ke <prefix>/drive_c/Program Files/).
+  - Entri menu/Desktop otomatis Wine dimatikan (winemenubuilder=d);
+    launcher resmi hanya dari tawaran apptricks-gui. Override: WINEMENUBUILDER=1.
 EOF
 }
 
