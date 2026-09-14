@@ -62,6 +62,129 @@ pick_prefix_or_new() {
   fi
 }
 
+# Daftar semua .desktop otomatis Wine (menu + Desktop) — untuk snapshot before/after.
+list_wine_desktops() {
+  find "$HOME/.local/share/applications/wine" "$HOME/Desktop" -name '*.desktop' 2>/dev/null | sort
+}
+
+# Konversi satu file Wine jadi launcher apptricks di menu/Desktop.
+# $1=prefix, $2=file sumber Wine, $3=menu|desktop|both
+promote_one_wine() {
+  local prefix="${1:?}" src="${2:?}" where="${3:-menu}"
+  local pname="${prefix#.}"
+  [[ -f "$src" ]] || return 1
+  local wname wexec wicon
+  wname="$(grep -m1 '^Name=' "$src" 2>/dev/null | cut -d= -f2-)"
+  wexec="$(grep -m1 '^Exec=' "$src" 2>/dev/null | cut -d= -f2-)"
+  wicon="$(grep -m1 '^Icon=' "$src" 2>/dev/null | cut -d= -f2-)"
+  [[ -z "$wname" ]] && wname="$pname"
+  wname="${wname%.lnk}"
+  [[ -z "$wexec" ]] && return 1
+  [[ -z "$wicon" ]] && wicon="wine"
+  # Pastikan Exec menunjuk ke prefix ini; kalau tidak, lewati (bukan milik kita).
+  if ! printf '%s' "$wexec" | grep -qF "$BASE/$prefix"; then
+    # File Desktop kadang tanpa WINEPREFIX — bungkus manual bila exe-nya jelas.
+    return 1
+  fi
+  local safe content desk made=()
+  safe="$(printf '%s' "$wname" | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//')"
+  [[ -z "$safe" ]] && safe="$pname"
+  content="$(cat <<EOF
+[Desktop Entry]
+Type=Application
+Name=$wname
+Exec=$wexec
+Icon=$wicon
+Categories=Emulator;
+Terminal=false
+EOF
+)"
+  case "$where" in
+    menu|both)
+      mkdir -p "$HOME/.local/share/applications"
+      desk="$HOME/.local/share/applications/apptricks-${pname}-${safe}.desktop"
+      printf '%s\n' "$content" > "$desk"; chmod +x "$desk"; made+=("$desk") ;;
+  esac
+  case "$where" in
+    desktop|both)
+      mkdir -p "$HOME/Desktop"
+      desk="$HOME/Desktop/${wname}.desktop"
+      printf '%s\n' "$content" > "$desk"; chmod +x "$desk"; made+=("$desk") ;;
+  esac
+  # Hapus file mentah Wine agar tidak duplikat (kecuali bila dest == src).
+  local s_real d
+  s_real="$(realpath -m "$src" 2>/dev/null || printf '%s' "$src")"
+  for d in "${made[@]}"; do
+    [[ "$(realpath -m "$d" 2>/dev/null || printf '%s' "$d")" == "$s_real" ]] && s_real=""
+  done
+  [[ -n "$s_real" ]] && rm -f "$src"
+  printf '%s\n' "${made[@]}"
+  return 0
+}
+
+# Tawarkan checklist untuk mempromosikan .desktop baru Wine.
+# $1=prefix, $2...=file baru. Return 0 bila >=1 dipromosikan.
+promote_wine_entries() {
+  local prefix="${1:?}"; shift
+  local cands=("$@")
+  [[ ${#cands[@]} -eq 0 ]] && return 1
+  local mine=() f
+  for f in "${cands[@]}"; do
+    [[ -f "$f" ]] || continue
+    if grep -qF "WINEPREFIX=$BASE/$prefix" "$f" 2>/dev/null; then
+      mine+=("$f")
+    fi
+  done
+  [[ ${#mine[@]} -eq 0 ]] && return 1
+  local rows=() b name disp
+  for f in "${mine[@]}"; do
+    b="$(basename "$f")"
+    name="$(grep -m1 '^Name=' "$f" 2>/dev/null | cut -d= -f2-)"
+    [[ -z "$name" ]] && name="$b"
+    disp="$name — $b"
+    if [[ "$b" == *[Uu]ninstall* || "$name" == *[Uu]ninstall* || "$name" == *[Rr]eadme* || "$name" == *[Hh]elp* ]]; then
+      rows+=(FALSE "$disp")
+    else
+      rows+=(TRUE "$disp")
+    fi
+  done
+  local sel
+  # Tinggi dinamis: 3 baris butuh ~400px, tambah 45px per baris (font besar/HiDPI aman).
+  local n_rows=${#mine[@]} dlg_h=$((260 + n_rows * 45))
+  [[ $dlg_h -lt 400 ]] && dlg_h=400
+  [[ $dlg_h -gt 700 ]] && dlg_h=700
+  sel="$(zenity --list --checklist --title="Shortcut Wine ditemukan" \
+    --text="Installer membuat shortcut ini (nama + icon asli dari Windows).\nCentang yang mau dipasang sebagai launcher apptricks:" \
+    --column=Pilih --column=Shortcut "${rows[@]}" --width=600 --height="$dlg_h" --separator=$'\n' 2>/dev/null)" || return 1
+  [[ -z "$sel" ]] && return 1
+  local where
+  where="$(zenity --list --title="Taruh di mana?" --text="Launcher yang dicentang mau ditaruh di:" \
+    --column=Pilihan --column=Keterangan \
+    "menu" "Di menu aplikasi" \
+    "desktop" "Di Desktop" \
+    "both" "Keduanya" \
+    --width=480 --height=260 2>/dev/null)" || return 1
+  local x b2 ok_count=0 made_all=() m
+  while IFS= read -r x; do
+    [[ -z "$x" ]] && continue
+    b2="${x##* — }"
+    for f in "${mine[@]}"; do
+      if [[ "$(basename "$f")" == "$b2" ]]; then
+        if m="$(promote_one_wine "$prefix" "$f" "$where")"; then
+          ok_count=$((ok_count + 1))
+          while IFS= read -r mm; do [[ -n "$mm" ]] && made_all+=("$mm"); done <<< "$m"
+        fi
+      fi
+    done
+  done <<< "$sel"
+  [[ $ok_count -eq 0 ]] && return 1
+  (kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true)
+  local note=""
+  [[ "$where" == "desktop" || "$where" == "both" ]] && note="\n\nCatatan: di Desktop, double-click pertama pilih Trust and Launch."
+  info "Launcher otomatis terpasang ($ok_count):\n$(printf '%s\n' "${made_all[@]}")$note"
+  return 0
+}
+
 do_install_file() {
   local setup="${1:?}"
   [[ -f "$setup" ]] || { err "File tidak ada:\n$setup"; return 1; }
@@ -72,28 +195,48 @@ do_install_file() {
   if [[ ! -d "$BASE/$prefix" ]]; then
     (echo "# init $prefix"; "$APPTRICKS_CLI" init "$prefix") 2>&1 | zenity --progress --pulsate --auto-close --title="Init $prefix" --text="Membuat prefix..." 2>/dev/null
   fi
-  "$APPTRICKS_CLI" install "$prefix" "$setup"
+  # Hybrid: biarkan winemenubuilder hidup HANYA saat install, lalu panen hasilnya.
+  local snap_before snap_after new_list
+  snap_before="$(mktemp)"; snap_after="$(mktemp)"
+  list_wine_desktops > "$snap_before"
+  WINEMENUBUILDER=1 "$APPTRICKS_CLI" install "$prefix" "$setup"
   local rc=$?
-  handle_install_rc "$rc" "$prefix" || return 1
-  # Tawarkan launcher dari exe ASLI yang dipilih user, bukan ditebak
+  list_wine_desktops > "$snap_after"
+  new_list="$(comm -13 "$snap_before" "$snap_after" || true)"
+  rm -f "$snap_before" "$snap_after"
+  local new_arr=()
+  while IFS= read -r ff; do [[ -n "$ff" ]] && new_arr+=("$ff"); done <<< "$new_list"
+  # Hanya vonis gagal bila benar-benar gagal (prefix hilang / user batal).
+  # Bukti sukses (shortcut baru) mengalahkan exit code installer.
+  handle_install_rc "$rc" "$prefix" "${#new_arr[@]}" || return 1
+  # Jalur otomatis: ada shortcut baru dari Wine → tawarkan promosi (nama+icon asli).
+  if [[ ${#new_arr[@]} -gt 0 ]] && promote_wine_entries "$prefix" "${new_arr[@]}"; then
+    return 0
+  fi
+  # Fallback manual (cara lama): user menunjuk exe utama sendiri.
   offer_launcher "$prefix" ""
 }
 
-# Nilai exit installer: banyak installer Windows (NSIS dkk) rutin keluar
-# non-nol padahal sukses di bawah Wine. Jadi non-nol = info, bukan vonis.
-# Return 0 = lanjut tawarkan launcher; 1 = batal total (misal prefix hilang).
+# Nilai exit installer: banyak installer Windows (NSIS/MT5 dkk) rutin keluar
+# non-nol (mis. 1) padahal sukses di bawah Wine. Jadi non-nol = info, bukan vonis.
+# $3 = jumlah shortcut baru Wine (bukti sukses mengalahkan exit code).
+# Diam (tanpa popup) bila ada bukti sukses atau rc=0 — langsung lanjut ke
+# langkah berikutnya. Popup hanya bila rc!=0 DAN tanpa shortcut baru.
+# Return 0 = lanjut; 1 = batal total (prefix hilang / user pilih berhenti).
 handle_install_rc() {
-  local rc="${1:?}" prefix="${2:?}"
+  local rc="${1:?}" prefix="${2:?}" has_new="${3:-0}"
   if [[ ! -d "$BASE/$prefix" ]]; then
     err "Prefix $prefix hilang setelah install (kode $rc). Cek $BASE."
     return 1
   fi
-  if [[ "$rc" -eq 0 ]]; then
-    info "Selesai install ke $prefix"
-  else
-    info "Installer selesai (kode keluar: $rc).\nKode non-nol umum terjadi dan bukan berarti gagal — app biasanya tetap terinstall.\nLog: $BASE/$prefix/apptricks-install.log"
+  if [[ "$has_new" -gt 0 || "$rc" -eq 0 ]]; then
+    return 0
   fi
-  return 0
+  if zenity --question --title="Install selesai — perlukah cek manual?" --width=520 \
+    --text="Installer keluar dengan kode $rc, dan tidak terdeteksi shortcut baru.\n\nIni UMUM terjadi (installer MT5/NSIS sering begitu) dan biasanya app tetap terinstall.\nLog: $BASE/$prefix/apptricks-install.log\n\nLanjut ke pemilihan exe manual?" 2>/dev/null; then
+    return 0
+  fi
+  return 1
 }
 
 # Tawarkan + buat launcher. $2 boleh kosong → user menunjuk exe di dalam prefix.

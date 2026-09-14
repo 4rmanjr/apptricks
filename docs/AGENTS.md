@@ -66,9 +66,12 @@ Prefix corrupt → hapus isi prefix lalu `apptricks init` ulang.
 Jangan coba repair registry manual.
 
 Installer keluar non-nol (mis. kode 1) padahal app terinstall & jalan =
-NORMAL (installer NSIS/dkk rutin begitu di Wine). GUI menanganinya via
-`handle_install_rc()`: info + tetap tawarkan launcher; hanya batal bila
-prefix hilang. Bukti/lacak: `<prefix>/apptricks-install.log` (ditulis via
+NORMAL (installer NSIS/MT5 dkk rutin begitu di Wine). GUI menanganinya via
+`handle_install_rc(rc, prefix, jumlah_shortcut_baru)`: diam tanpa popup bila
+ada bukti sukses (shortcut baru ditemukan) atau rc=0 — langsung lanjut ke
+tawaran launcher. Popup `--question` (lanjut manual / berhenti) hanya muncul
+bila rc!=0 DAN tanpa shortcut baru. Hanya batal bila prefix hilang atau user
+pilih berhenti. Bukti/lacak: `<prefix>/apptricks-install.log` (ditulis via
 `tee`, exit code asli wine tetap diteruskan berkat `pipefail`).
 
 ## 5. Struktur
@@ -101,8 +104,14 @@ launcher per-app) — KDE/KIO menolak eksekusi tanpanya ("not owned by root and
 executable flag not set"). `setup.sh` dan `make_launcher()` sudah otomatis.
 
 `bin/apptricks` menonaktifkan `winemenubuilder.exe` via `WINEDLLOVERRIDES`
-agar Wine tidak membuat entri menu/Desktop otomatis yang menduplikasi
-launcher apptricks. Override per-perintah: `WINEMENUBUILDER=1 apptricks ...`.
+secara default agar tidak banjir entri duplikat. Override sekali:
+`apptricks --with-menu install ...` atau `WINEMENUBUILDER=1 apptricks ...`.
+GUI memakai mode hybrid: saat install, builder dihidupkan sementara
+(`WINEMENUBUILDER=1`), file `.desktop` baru di-snapshot (before/after),
+lalu `promote_wine_entries()` menawarkan checklist (nama + icon asli Wine)
+dan mengkonversi ke `apptricks-<Nama>-<App>.desktop` via `promote_one_wine()`
+(Exec/Icon/Name asli dipertahankan, file mentah Wine dihapus anti-duplikat).
+Bila tidak ada shortcut baru terdeteksi, fallback ke cara manual lama.
 
 Launcher per-app (`apptricks-<Nama>.desktop`) DITAWARKAN OTOMATIS dengan
 pilihan lokasi (`offer_launcher()`): menu / Desktop / keduanya. Desktop =

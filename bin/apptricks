@@ -28,10 +28,10 @@ usage() {
 apptricks - kelola Wine prefix per-app (1 app = 1 prefix di <BASE>/.[NamaApp])
 
 Usage:
-  apptricks list
+  apptricks [--with-menu] list
   apptricks init <Name>                  # buat + wineboot --init  (Name boleh .AppKu atau AppKu)
-  apptricks install <Name> <setup.exe> [args...]   # jalankan installer ke prefix itu
-  apptricks run <Name> <exe> [args...]   # jalankan exe (path unix drive_c/... atau C:\...)
+  apptricks [--with-menu] install <Name> <setup.exe> [args...]   # jalankan installer ke prefix itu
+  apptricks [--with-menu] run <Name> <exe> [args...]   # jalankan exe (path unix drive_c/... atau C:\...)
   apptricks cfg <Name>                   # winecfg untuk prefix itu
   apptricks explorer <Name>              # wine explorer
   apptricks uninstaller <Name>           # wine uninstaller
@@ -49,9 +49,21 @@ Catatan:
   - Jangan sentuh ~/.wine. Semua app baru wajib prefix sendiri di $BASE/.[Nama].
   - Installer biarkan default C:\Program Files\... (jatuhnya ke <prefix>/drive_c/Program Files/).
   - Entri menu/Desktop otomatis Wine dimatikan (winemenubuilder=d);
-    launcher resmi hanya dari tawaran apptricks-gui. Override: WINEMENUBUILDER=1.
+    launcher resmi hanya dari tawaran apptricks-gui. Override sekali:
+    apptricks --with-menu install ...  atau  WINEMENUBUILDER=1 apptricks ...
+    GUI otomatis pakai mode hybrid: builder ON saat install, hasilnya
+    dipanen (nama+icon asli) lalu dikonversi jadi launcher apptricks.
 EOF
 }
+
+# Flag global: --with-menu → izinkan winemenubuilder hanya untuk perintah ini.
+# Contoh: apptricks --with-menu install .AppKu setup.exe
+# (GUI memakai WINEMENUBUILDER=1 otomatis saat install agar bisa memanen
+#  shortcut + icon asli Wine, lalu dikonversi jadi launcher apptricks.)
+if [[ "${1:-}" == "--with-menu" ]]; then
+  export WINEMENUBUILDER=1
+  shift
+fi
 
 cmd="${1:-help}"; shift || true
 
