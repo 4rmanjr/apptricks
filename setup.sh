@@ -46,7 +46,11 @@ warn() { printf '  %s!%s     %s\n' "$YLW" "$RST" "$1"; }
 die()  { printf '\n%sBATAL: %s%s\n' "$RED" "$1" "$RST" >&2; exit 1; }
 
 usage() {
-  sed -n '2,/^#$/p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
+  # Cetak blok header (baris 3) sampai baris 'set -uo pipefail', tanpa baris
+  # terakhir itu, lalu buang awalan '# '. Jangan pakai '/^#$/': baris 2 dan
+  # beberapa pemisah di header juga tepat '#' sehingga rentangnya berhenti
+  # terlalu awal.
+  sed -n '3,/^set -uo pipefail$/p' "${BASH_SOURCE[0]}" | sed -e '$d' -e 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -146,6 +150,47 @@ else
         apt) sudo apt-get update && sudo apt-get install -y icoutils && ok "icoutils terinstall" || warn "install icoutils gagal (tidak fatal)" ;;
         dnf) sudo dnf install -y icoutils && ok "icoutils terinstall" || warn "install icoutils gagal (tidak fatal)" ;;
         zypper) sudo zypper install -y icoutils && ok "icoutils terinstall" || warn "install icoutils gagal (tidak fatal)" ;;
+      esac
+    fi
+  fi
+
+  # Dukungan app 32-bit: prefix 'init --win32' butuh lib wine 32-bit.
+  CPU_ARCH="$(uname -m)"
+  WINE_MAJOR="$(wine --version 2>/dev/null | sed -n 's/^wine-\([0-9][0-9]*\).*/\1/p')"
+  # Lib 32-bit 'asli' (i386-unix dsb). Dir i386-windows sengaja tidak dihitung:
+  # itu bagian PE yang juga ada di build WoW64 tanpa lib 32-bit.
+  HAVE_W32=0
+  for d in /usr/lib/wine/i386-unix /usr/lib32/wine /usr/lib32/wine/i386-unix \
+           /usr/lib/i386-linux-gnu/wine; do
+    [[ -d "$d" ]] && { HAVE_W32=1; break; }
+  done
+  if [[ $HAVE_W32 -eq 0 ]] && have dpkg && dpkg -s wine32:i386 >/dev/null 2>&1; then HAVE_W32=1; fi
+  # Wine >= 9 build WoW64: app 32-bit jalan tanpa paket lib 32-bit terpisah.
+  WOW64=0
+  [[ -d /usr/lib/wine/i386-windows && -n "$WINE_MAJOR" && $WINE_MAJOR -ge 9 ]] && WOW64=1
+  if [[ "$CPU_ARCH" != x86_64 && "$CPU_ARCH" != i?86 ]]; then
+    skip "dukungan 32-bit: CPU $CPU_ARCH (x86 32-bit di sini butuh emulator seperti box64/FEX)"
+  elif [[ $HAVE_W32 -eq 1 ]]; then
+    ok "dukungan app 32-bit tersedia (lib 32-bit terpasang)"
+  elif [[ $WOW64 -eq 1 ]]; then
+    ok "dukungan app 32-bit tersedia via WoW64 Wine $WINE_MAJOR (tanpa lib 32-bit)"
+  else
+    warn "dukungan app 32-bit tidak terdeteksi — 'apptricks init --win32' bisa gagal"
+    if [[ "$PM" == apt ]] && have sudo; then
+      if ask_yes_no "aktifkan arsitektur i386 + install wine32 (untuk app/installer 32-bit)" "y"; then
+        info "menjalankan dpkg --add-architecture i386 (mungkin minta password sudo)..."
+        if sudo dpkg --add-architecture i386 && sudo apt-get update && sudo apt-get install -y wine32:i386; then
+          ok "wine32 terinstall"
+        else
+          warn "install wine32 gagal — app 32-bit masih bisa dicoba di prefix win64"
+        fi
+      fi
+    else
+      case "$PM" in
+        pacman) info "Arch: aktifkan repo multilib lalu 'sudo pacman -S lib32-gcc-libs wine'" ;;
+        dnf)    info "Fedora: 'sudo dnf install wine.i686' (atau paket wine 32-bit setara)" ;;
+        zypper) info "openSUSE: 'sudo zypper install wine-32bit'" ;;
+        *)      info "install lib wine 32-bit distro secara manual untuk prefix --win32" ;;
       esac
     fi
   fi

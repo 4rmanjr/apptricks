@@ -23,8 +23,9 @@ else
 fi
 
 if [[ $PURGE -eq 1 ]]; then
-  BASE=""
+  # config berisi APPTRICKS_BASE (bukan BASE) — jangan tertukar.
   [[ -f "$HOME/.config/apptricks/config" ]] && . "$HOME/.config/apptricks/config"
+  BASE="${APPTRICKS_BASE:-}"
   rm -rfv "$HOME/.config/apptricks"
   if [[ -n "$BASE" && -d "$BASE" ]]; then
     read -r -p "hapus SELURUH prefix di $BASE? [y/N]: " ans2

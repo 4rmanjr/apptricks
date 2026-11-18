@@ -14,7 +14,14 @@ and settings. Delete a prefix = fully uninstall that app.
 
 ## Features
 
-- **CLI** — `apptricks list init install run cfg explorer uninstaller kill path`
+- **CLI** — `apptricks list init install run cfg explorer uninstaller kill path remove`
+- **32/64-bit per app** — `apptricks init .OldApp --win32` (default `--win64`).
+  The choice is recorded in `<prefix>/.apptricks-arch`, shown by `apptricks list`
+  and asked by the GUI when creating a prefix. If an install fails in a 64-bit
+  prefix without producing shortcuts, the GUI offers to recreate it as 32-bit
+  and retry (the old prefix content is deleted)
+- **Hapus per-app** — `apptricks remove .MyApp` menghapus prefix + launcher/icon
+  miliknya (minta konfirmasi; `--yes` untuk skrip)
 - **Zenity GUI** — full menu, automatic prefix-name suggestions, zero extra deps
 - **Dolphin right-click** — `Install to Prefix...` / `Run with Prefix...`
 - **Portable import** — an exe outside any prefix is offered to be copied into
@@ -55,7 +62,8 @@ Options: `--yes` (non-interactive) · `--base DIR` (prefix location) ·
 Then either use the terminal:
 
 ```bash
-apptricks init .MyApp
+apptricks init .MyApp                        # 64-bit (default)
+apptricks init .OldApp --win32               # installer lama / app 32-bit
 apptricks install .MyApp ~/Downloads/setup-myapp.exe
 apptricks run .MyApp "<BASE>/.MyApp/drive_c/Program Files/MyApp/app.exe"
 ```

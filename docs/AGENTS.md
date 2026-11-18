@@ -23,14 +23,19 @@
 
 ```
 apptricks list
-apptricks init <Name>                        # .AppKu atau AppKu (otomatis dinormalisasi ke .Nama)
+apptricks init <Name>
+apptricks init <Name> --win32               # prefix 32-bit (default --win64)
+# GUI: bila install gagal di prefix win64 dan tidak ada shortcut baru, GUI
+# menawarkan recreate prefix itu sebagai win32 lalu install ulang (data lama hilang).                        # .AppKu atau AppKu (otomatis dinormalisasi ke .Nama)
 apptricks install <Name> <setup.exe> [args]  # validasi file + prefix ada, lalu wine setup.exe
+                                             # (.msi otomatis lewat wine msiexec /i)
 apptricks run <Name> <exe> [args]            # jalankan exe di dalam prefix
 apptricks cfg <Name>                         # winecfg
 apptricks explorer <Name>                    # wine explorer
 apptricks uninstaller <Name>                 # daftar program terinstall
 apptricks kill <Name>                        # wineserver -k
 apptricks path <Name>                        # cetak path prefix
+apptricks remove <Name> [--yes]              # hapus prefix + launcher/icon apptricks-nya
 ```
 
 Dilarang membuat helper tandingan. Kalau kurang, edit `bin/` di repo,
@@ -64,6 +69,9 @@ WINEPREFIX="<BASE>/.AppKu" wineserver -k
 
 Prefix corrupt → hapus isi prefix lalu `apptricks init` ulang.
 Jangan coba repair registry manual.
+Uninstall total satu app = `apptricks remove .NamaApp --yes` (prefix, launcher
+menu `apptricks-<Nama>*` beserta icon ikut terhapus; launcher di Desktop
+tidak disentuh karena dianggap milik user).
 
 Installer keluar non-nol (mis. kode 1) padahal app terinstall & jalan =
 NORMAL (installer NSIS/MT5 dkk rutin begitu di Wine). GUI menanganinya via

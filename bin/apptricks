@@ -20,7 +20,24 @@ fi
 norm() {
   local n="${1:?nama prefix diperlukan, cth: .MT5XM atau MT5XM}"
   [[ "$n" != .* ]] && n=".$n"
+  # Tolak nama yang bisa keluar dari BASE ("/", ".", ".."). Tanpa ini
+  # 'apptricks init ../../x' akan membuat/menghapus direktori di luar BASE.
+  case "$n" in
+    .|..|*/*|*$'\n'*)
+      printf 'ERROR: nama prefix tidak valid: %s\n' "$1" >&2
+      printf '       tidak boleh ".", "..", mengandung "/" atau baris baru.\n' >&2
+      exit 1 ;;
+  esac
   printf '%s/%s' "$BASE" "$n"
+}
+
+# Arch prefix dicatat di <prefix>/.apptricks-arch saat init. Prefix lama (sebelum
+# fitur ini) dibuat tanpa WINEARCH, jadi arch-nya memang win64 (default Wine).
+arch_of() {
+  local a=""
+  [[ -f "$1/.apptricks-arch" ]] && a="$(<"$1/.apptricks-arch")"
+  [[ "$a" == win32 || "$a" == win64 ]] || a=win64
+  printf '%s' "$a"
 }
 
 usage() {
@@ -29,8 +46,10 @@ apptricks - kelola Wine prefix per-app (1 app = 1 prefix di <BASE>/.[NamaApp])
 
 Usage:
   apptricks [--with-menu] list
-  apptricks init <Name>                  # buat + wineboot --init  (Name boleh .AppKu atau AppKu)
-  apptricks [--with-menu] install <Name> <setup.exe> [args...]   # jalankan installer ke prefix itu
+  apptricks init <Name> [--win32|--win64]  # buat + wineboot --init (Name boleh .AppKu atau AppKu)
+                                         # default --win64; --win32 untuk installer lama
+  apptricks [--with-menu] install <Name> <setup.exe|setup.msi> [args...]  # jalankan installer ke prefix itu
+  apptricks remove <Name> [--yes]        # hapus prefix + launcher apptricks-nya (PERMANEN)
   apptricks [--with-menu] run <Name> <exe> [args...]   # jalankan exe (path unix drive_c/... atau C:\...)
   apptricks cfg <Name>                   # winecfg untuk prefix itu
   apptricks explorer <Name>              # wine explorer
@@ -47,7 +66,13 @@ Contoh:
 Catatan:
   - Jangan set WINEPREFIX global di .bashrc. Selalu eksplisit per perintah.
   - Jangan sentuh ~/.wine. Semua app baru wajib prefix sendiri di $BASE/.[Nama].
+  - Arsitektur prefix dipilih saat init dan tidak bisa diubah belakangan
+    (harus 'apptricks remove' lalu init ulang). Dicatat di <prefix>/.apptricks-arch
+    dan ditampilkan oleh 'apptricks list'.
   - Installer biarkan default C:\Program Files\... (jatuhnya ke <prefix>/drive_c/Program Files/).
+  - File .msi otomatis dijalankan lewat 'wine msiexec /i', bukan 'wine file.msi'.
+  - 'apptricks remove' menghapus prefix beserta launcher menu apptricks-<Nama>*
+    dan icon-nya. Tanpa --yes, ia minta konfirmasi lebih dulu.
   - Entri menu/Desktop otomatis Wine dimatikan (winemenubuilder=d);
     launcher resmi hanya dari tawaran apptricks-gui. Override sekali:
     apptricks --with-menu install ...  atau  WINEMENUBUILDER=1 apptricks ...
@@ -69,7 +94,13 @@ cmd="${1:-help}"; shift || true
 
 case "$cmd" in
   list)
-    ls -d "$BASE"/.*/ 2>/dev/null | grep -v -E '/\./$|/\.\./$' || echo "Belum ada prefix di $BASE"
+    found=0
+    while IFS= read -r P; do
+      [[ -z "$P" ]] && continue
+      found=1
+      printf '%-52s %s\n' "${P%/}" "$(arch_of "$P")"
+    done < <(ls -d "$BASE"/.*/ 2>/dev/null | grep -v -E '/\./$|/\.\./$' || true)
+    [[ $found -eq 1 ]] || echo "Belum ada prefix di $BASE"
     ;;
   path)
     norm "${1:?}"
@@ -77,9 +108,27 @@ case "$cmd" in
     ;;
   init)
     P="$(norm "${1:?}")"
+    case "${2:-}" in
+      ""|--win64) ARCH=win64 ;;
+      --win32)    ARCH=win32 ;;
+      *) echo "ERROR: opsi tak dikenal: $2 (pakai --win32 atau --win64)" >&2; exit 1 ;;
+    esac
+    # Prefix yang sudah terisi tidak boleh diubah arch-nya: WINEARCH hanya
+    # berlaku saat prefix dibuat, mengubahnya di tengah jalan merusak prefix.
+    if [[ -d "$P" && -n "$(ls -A "$P" 2>/dev/null)" ]]; then
+      cur="$(arch_of "$P")"
+      if [[ "$cur" != "$ARCH" ]]; then
+        echo "ERROR: prefix sudah ada dengan arch $cur: $P" >&2
+        echo "       untuk ganti ke $ARCH: apptricks remove $(basename "$P") --yes lalu init ulang" >&2
+        exit 1
+      fi
+    fi
     mkdir -p "$P"
-    echo "Init prefix: $P"
-    WINEPREFIX="$P" wineboot --init
+    # Ditulis SEBELUM wineboot agar percobaan yang gagal tetap tercatat arch-nya
+    # dan tidak dianggap prefix win64 lama.
+    printf '%s\n' "$ARCH" > "$P/.apptricks-arch"
+    echo "Init prefix: $P ($ARCH)"
+    WINEARCH="$ARCH" WINEPREFIX="$P" wineboot --init
     echo "OK: $P"
     echo "Cek: $P/drive_c/Program Files/"
     ls "$P/drive_c/" || true
@@ -92,7 +141,11 @@ case "$cmd" in
     echo "Install '$SETUP' -> '$P'"
     echo "Log: $P/apptricks-install.log"
     # pipefail aktif (set -euo pipefail): exit code = milik wine, bukan tee.
-    WINEPREFIX="$P" wine "$SETUP" "$@" 2>&1 | tee -a "$P/apptricks-install.log"
+    # Paket MSI butuh msiexec; 'wine paket.msi' tidak dijamin memasang apa pun.
+    case "${SETUP,,}" in
+      *.msi) WINEPREFIX="$P" wine msiexec /i "$SETUP" "$@" 2>&1 | tee -a "$P/apptricks-install.log" ;;
+      *)     WINEPREFIX="$P" wine "$SETUP" "$@" 2>&1 | tee -a "$P/apptricks-install.log" ;;
+    esac
     ;;
   run)
     P="$(norm "${1:?}")"; EXE="${2:?exe diperlukan}"
@@ -115,6 +168,36 @@ case "$cmd" in
     P="$(norm "${1:?}")"
     WINEPREFIX="$P" wineserver -k || true
     echo "killed: $P"
+    ;;
+  remove|rm)
+    P="$(norm "${1:?}")"
+    [[ -d "$P" ]] || { echo "ERROR: prefix tidak ada: $P" >&2; exit 1; }
+    if [[ "${2:-}" != --yes && "${2:-}" != -y ]]; then
+      if [[ -t 0 ]]; then
+        printf 'Hapus PERMANEN %s?\nSemua app & data di dalamnya hilang. [y/N]: ' "$P" >&2
+        read -r ans || ans=""
+        [[ "$ans" == y || "$ans" == Y ]] || { echo "dibatalkan." ; exit 1; }
+      else
+        echo "ERROR: butuh konfirmasi; jalankan: apptricks remove $(basename "$P") --yes" >&2
+        exit 1
+      fi
+    fi
+    WINEPREFIX="$P" wineserver -k 2>/dev/null || true
+    rm -rf -- "$P" || { echo "ERROR: gagal menghapus $P" >&2; exit 1; }
+    echo "dihapus: $P"
+    # Launcher & icon milik prefix ini ikut dibersihkan agar tidak yatim.
+    pname="$(basename "$P")"; pname="${pname#.}"
+    gone=0
+    for d in "$HOME/.local/share/applications/apptricks-$pname.desktop" \
+             "$HOME/.local/share/applications/apptricks-$pname"-*.desktop; do
+      if [[ -f "$d" ]]; then rm -f -- "$d"; gone=1; echo "launcher dihapus: $d"; fi
+    done
+    for i in "$HOME/.local/share/icons/hicolor/256x256/apps/apptricks-$pname.png"; do
+      if [[ -f "$i" ]]; then rm -f -- "$i"; echo "icon dihapus: $i"; fi
+    done
+    if [[ $gone -eq 1 ]]; then
+      (kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true)
+    fi
     ;;
   help|-h|--help|*)
     usage

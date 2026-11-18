@@ -12,6 +12,35 @@ APPTRICKS_CLI="$HOME/.local/bin/apptricks"
 err() { zenity --error --text="$1" 2>/dev/null; }
 info() { zenity --info --text="$1" 2>/dev/null; }
 
+# Arch prefix dicatat CLI di <prefix>/.apptricks-arch (win32/win64).
+# Prefix lama tanpa file itu = win64 (dibuat tanpa WINEARCH).
+arch_of_prefix() {
+  local a=""
+  [[ -f "$1/.apptricks-arch" ]] && a="$(<"$1/.apptricks-arch")"
+  [[ "$a" == win32 || "$a" == win64 ]] || a=win64
+  printf '%s' "$a"
+}
+
+# Tanya arsitektur untuk prefix baru. HARUS dipanggil dari shell pemanggil
+# (PICK_ARCH="$(pick_arch ...)"), jangan dari dalam pick_prefix_or_new:
+# fungsi itu jalan di $( ), jadi variabel yang di-set di dalamnya hilang.
+pick_arch() {
+  local a
+  a="$(zenity --list --title="Arsitektur Windows untuk ${1:?}" \
+    --text="Arsitektur tidak bisa diubah tanpa menghapus prefix." \
+    --column=Arch --column=Keterangan \
+    "win64" "64-bit — default; hampir semua app, termasuk app 32-bit di Wine modern" \
+    "win32" "32-bit — installer lama (VB6, Delphi, repack) yang gagal di 64-bit" \
+    --width=560 --height=300 2>/dev/null)" || return 1
+  [[ "$a" == win32 || "$a" == win64 ]] || a=win64
+  printf '%s' "$a"
+}
+
+PICK_ARCH=win64
+# Diisi install_into_prefix (bukan lewat $( ), supaya nilainya tidak hilang).
+INSTALL_RC=0
+NEW_ARR=()
+
 # Saran nama prefix dari nama file setup (generik, tanpa hardcode app).
 # Mapping khusus milik user (opsional) di ~/.config/apptricks/aliases,
 # format per baris: pola=nama   contoh: photoshop=.Photoshop
@@ -45,12 +74,15 @@ list_prefixes() {
 }
 
 pick_prefix_or_new() {
-  # $1 = judul. Output: nama prefix (.Nama). Return 1 bila batal.
+  # $1 = judul, $2 = saran nama, $3 = 1 → tanpa opsi "buat baru".
+  # Output: nama prefix (.Nama). Return 1 bila batal.
   local title="$1" rows=() p
-  while IFS= read -r p; do [[ -n "$p" ]] && rows+=("$p" "prefix ada"); done < <(list_prefixes)
-  rows+=("__NEW__" "Buat prefix baru...")
+  while IFS= read -r p; do
+    [[ -n "$p" ]] && rows+=("$p" "$(arch_of_prefix "$BASE/$p")")
+  done < <(list_prefixes)
+  [[ "${3:-0}" == 1 ]] || rows+=("__NEW__" "buat baru")
   local sel
-  sel="$(zenity --list --title="$title" --column=Prefix --column=Keterangan "${rows[@]}" --width=420 --height=320 2>/dev/null)" || return 1
+  sel="$(zenity --list --title="$title" --column=Prefix --column=Arch "${rows[@]}" --width=440 --height=320 2>/dev/null)" || return 1
   if [[ "$sel" == "__NEW__" ]]; then
     local sug="${2:-.AppBaru}"
     local name
@@ -150,7 +182,10 @@ promote_wine_entries() {
   done
   local sel
   # Tinggi dinamis: 3 baris butuh ~400px, tambah 45px per baris (font besar/HiDPI aman).
-  local n_rows=${#mine[@]} dlg_h=$((260 + n_rows * 45))
+  # Dua baris terpisah: pada satu 'local', semua kata di-expand SEBELUM
+  # assignment, jadi $n_rows masih unbound (set -u → shell mati).
+  local n_rows=${#mine[@]}
+  local dlg_h=$((260 + n_rows * 45))
   [[ $dlg_h -lt 400 ]] && dlg_h=400
   [[ $dlg_h -gt 700 ]] && dlg_h=700
   sel="$(zenity --list --checklist --title="Shortcut Wine ditemukan" \
@@ -185,32 +220,54 @@ promote_wine_entries() {
   return 0
 }
 
+# Jalankan installer di prefix. Mengisi INSTALL_RC dan NEW_ARR (shortcut baru
+# dari Wine) — memakai variabel global karena fungsi tidak bisa mengembalikan
+# array, dan harus dipanggil tanpa $( ) agar nilainya bertahan.
+install_into_prefix() {
+  local prefix="${1:?}" setup="${2:?}" before after f
+  before="$(mktemp)"; after="$(mktemp)"
+  list_wine_desktops > "$before"
+  # Hybrid: biarkan winemenubuilder hidup HANYA saat install, lalu panen hasilnya.
+  WINEMENUBUILDER=1 "$APPTRICKS_CLI" install "$prefix" "$setup"
+  INSTALL_RC=$?
+  list_wine_desktops > "$after"
+  NEW_ARR=()
+  while IFS= read -r f; do [[ -n "$f" ]] && NEW_ARR+=("$f"); done < <(comm -13 "$before" "$after" || true)
+  rm -f "$before" "$after"
+}
+
 do_install_file() {
   local setup="${1:?}"
   [[ -f "$setup" ]] || { err "File tidak ada:\n$setup"; return 1; }
   local sug; sug="$(suggest_name "$setup")"
   local prefix
   prefix="$(pick_prefix_or_new "Install $(basename "$setup") ke..." "$sug")" || return 0
-  # init bila belum ada
+  # init bila belum ada (tanya arch dulu — hanya untuk prefix baru)
   if [[ ! -d "$BASE/$prefix" ]]; then
-    (echo "# init $prefix"; "$APPTRICKS_CLI" init "$prefix") 2>&1 | zenity --progress --pulsate --auto-close --title="Init $prefix" --text="Membuat prefix..." 2>/dev/null
+    PICK_ARCH="$(pick_arch "$prefix")" || return 0
+    (echo "# init $prefix ($PICK_ARCH)"; "$APPTRICKS_CLI" init "$prefix" "--$PICK_ARCH") 2>&1 | zenity --progress --pulsate --auto-close --title="Init $prefix" --text="Membuat prefix $PICK_ARCH..." 2>/dev/null
   fi
-  # Hybrid: biarkan winemenubuilder hidup HANYA saat install, lalu panen hasilnya.
-  local snap_before snap_after new_list
-  snap_before="$(mktemp)"; snap_after="$(mktemp)"
-  list_wine_desktops > "$snap_before"
-  WINEMENUBUILDER=1 "$APPTRICKS_CLI" install "$prefix" "$setup"
-  local rc=$?
-  list_wine_desktops > "$snap_after"
-  new_list="$(comm -13 "$snap_before" "$snap_after" || true)"
-  rm -f "$snap_before" "$snap_after"
-  local new_arr=()
-  while IFS= read -r ff; do [[ -n "$ff" ]] && new_arr+=("$ff"); done <<< "$new_list"
+  local arch; arch="$(arch_of_prefix "$BASE/$prefix")"
+  install_into_prefix "$prefix" "$setup"
+
+  # Installer gagal di prefix 64-bit dan tidak menghasilkan shortcut apa pun →
+  # kemungkinan besar installer 32-bit. Tawarkan ulang di prefix 32-bit.
+  if [[ "$INSTALL_RC" -ne 0 && ${#NEW_ARR[@]} -eq 0 && "$arch" == win64 ]]; then
+    if zenity --question --title="Installer mungkin 32-bit" --width=580 \
+      --text="Installer keluar dengan kode $INSTALL_RC dan tidak membuat shortcut apa pun di prefix 64-bit.\n\nBanyak installer lama hanya mau jalan di prefix 32-bit.\nBuat ulang $prefix sebagai 32-bit lalu ulangi install?\n\nPERINGATAN: seluruh isi prefix $prefix sekarang akan dihapus." 2>/dev/null; then
+      "$APPTRICKS_CLI" remove "$prefix" --yes >/dev/null 2>&1 \
+        || { err "Gagal menghapus prefix $prefix.\nCoba manual: apptricks remove $prefix --yes"; return 1; }
+      PICK_ARCH=win32
+      (echo "# init $prefix (win32)"; "$APPTRICKS_CLI" init "$prefix" --win32) 2>&1 | zenity --progress --pulsate --auto-close --title="Init $prefix (win32)" --text="Membuat prefix 32-bit..." 2>/dev/null
+      install_into_prefix "$prefix" "$setup"
+    fi
+  fi
+
   # Hanya vonis gagal bila benar-benar gagal (prefix hilang / user batal).
   # Bukti sukses (shortcut baru) mengalahkan exit code installer.
-  handle_install_rc "$rc" "$prefix" "${#new_arr[@]}" || return 1
+  handle_install_rc "$INSTALL_RC" "$prefix" "${#NEW_ARR[@]}" || return 1
   # Jalur otomatis: ada shortcut baru dari Wine → tawarkan promosi (nama+icon asli).
-  if [[ ${#new_arr[@]} -gt 0 ]] && promote_wine_entries "$prefix" "${new_arr[@]}"; then
+  if [[ ${#NEW_ARR[@]} -gt 0 ]] && promote_wine_entries "$prefix" "${NEW_ARR[@]}"; then
     return 0
   fi
   # Fallback manual (cara lama): user menunjuk exe utama sendiri.
@@ -273,7 +330,7 @@ cleanup_wine_dupes() {
   bs_pat="${appdir//\//\\\\}"
   local cands=() f
   while IFS= read -r f; do
-    grep -q "WINEPREFIX=$BASE/$prefix" "$f" 2>/dev/null || continue
+    grep -qF "WINEPREFIX=$BASE/$prefix" "$f" 2>/dev/null || continue
     if grep -qiF "$appdir" "$f" 2>/dev/null || grep -qiF "$bs_pat" "$f" 2>/dev/null; then
       cands+=("$f")
     fi
@@ -351,7 +408,7 @@ make_launcher() {
 [Desktop Entry]
 Type=Application
 Name=$appname
-Exec=env WINEPREFIX=$BASE/$prefix wine "$exe"
+Exec=env WINEPREFIX="$BASE/$prefix" wine "$exe"
 Icon=$icon
 Categories=Emulator;
 Terminal=false
@@ -420,6 +477,23 @@ import_portable() {
   printf '%s' "$newexe"
 }
 
+# Hapus satu prefix (+ launcher menu/icon miliknya). Konfirmasi dulu, karena
+# permanen. Logika hapus ada di CLI 'apptricks remove --yes' agar tidak ganda.
+do_remove_prefix() {
+  if [[ -z "$(list_prefixes)" ]]; then info "Belum ada prefix di:\n$BASE"; return 0; fi
+  local prefix
+  prefix="$(pick_prefix_or_new "Hapus prefix (permanen)..." "" 1)" || return 0
+  local p="$BASE/$prefix"
+  [[ -d "$p" ]] || { err "Prefix tidak ada:\n$p"; return 1; }
+  zenity --question --title="Hapus $prefix selamanya?" --width=520 \
+    --text="Prefix ini akan dihapus PERMANEN, termasuk semua app dan datanya:\n$p\n\nLauncher menu apptricks dan icon-nya juga ikut dihapus.\nLanjut?" 2>/dev/null || return 0
+  if "$APPTRICKS_CLI" remove "$prefix" --yes >/dev/null 2>&1; then
+    info "Prefix dihapus:\n$p"
+  else
+    err "Gagal menghapus:\n$p\n\nCoba dari terminal: apptricks remove $prefix --yes"
+  fi
+}
+
 do_run_from_prefix() {
   local prefix
   prefix="$(pick_prefix_or_new "Jalankan app dari..." ".AppBaru")" || return 0
@@ -441,19 +515,27 @@ main_menu() {
       "Init prefix baru" "Buat prefix kosong" \
       "Winecfg" "Konfigurasi prefix" \
       "Uninstaller" "Daftar program terinstall" \
-      --width=520 --height=360 2>/dev/null)" || break
+      "Hapus prefix" "Hapus satu prefix beserta app di dalamnya" \
+      --width=520 --height=420 2>/dev/null)" || break
     case "$c" in
       "Install exe")
         f="$(zenity --file-selection --title="Pilih setup.exe" --file-filter="Windows | *.exe *.msi" 2>/dev/null)" && do_install_file "$f" ;;
       "Jalankan app") do_run_from_prefix ;;
       "List prefix")
-        list_prefixes | zenity --text-info --title="Prefix di $BASE" --width=400 --height=300 2>/dev/null ;;
+        while IFS= read -r p; do
+          [[ -n "$p" ]] && printf '%-24s %s\n' "$p" "$(arch_of_prefix "$BASE/$p")"
+        done < <(list_prefixes) | zenity --text-info --title="Prefix di $BASE (nama + arch)" --width=420 --height=300 2>/dev/null ;;
       "Init prefix baru")
-        n="$(zenity --entry --title="Init prefix" --text="Nama:" --entry-text=".AppBaru" 2>/dev/null)" && "$APPTRICKS_CLI" init "$n" | zenity --text-info --title="Init" --width=500 --height=200 2>/dev/null ;;
+        if n="$(zenity --entry --title="Init prefix" --text="Nama:" --entry-text=".AppBaru" 2>/dev/null)"; then
+          if ar="$(pick_arch "$n")"; then
+            "$APPTRICKS_CLI" init "$n" "--$ar" | zenity --text-info --title="Init ($ar)" --width=500 --height=200 2>/dev/null
+          fi
+        fi ;;
       "Winecfg")
         p="$(pick_prefix_or_new "Winecfg untuk..." ".AppBaru")" && "$APPTRICKS_CLI" cfg "$p" ;;
       "Uninstaller")
         p="$(pick_prefix_or_new "Uninstaller untuk..." ".AppBaru")" && "$APPTRICKS_CLI" uninstaller "$p" ;;
+      "Hapus prefix") do_remove_prefix ;;
     esac
   done
 }
